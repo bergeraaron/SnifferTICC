@@ -40,20 +40,27 @@ struct TICC_device
 	u_char dev_type;
 	bool configured;
 };
-TICC_device TICC_dev;
-
+TICC_device TICC_devices[20];
 int TICC_device_ctr = 0;
 
 //zigbee 11-26
-uint8_t zigbee_channels[16] = {11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26};
+uint8_t zigbee_channels[16] = {20,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26};
 //just advertising channels
 uint8_t btle_channels[16] = {37,38,39,37,38,39,37,38,39,37,38,39,37,38,39,37};
 
 libusb_context *maincontext = NULL;
 
 bool cmd_Run = true;
+bool main_shutdown = false;
+//thread stuff
+#define MaxThreads 20
+pthread_t workers[MaxThreads];
+unsigned short sleeptimes[MaxThreads];
+int thread_running[MaxThreads];
+int thread_number[MaxThreads];
 
 //function definitions
+void* command_thread(void * arg);
 static int get_ident(libusb_device_handle *dev);
 static int set_power(libusb_device_handle *dev, uint8_t power, int retries);
 static int set_channel(libusb_device_handle *dev, uint8_t channel);
@@ -63,6 +70,43 @@ static void btle_read(libusb_device_handle *dev, int channel);
 int find_devices();
 void SigHandler(int sig);
 void SetupSigHandler();
+
+//functions
+void* command_thread(void * arg)
+{
+
+    printf("command thread \n");
+    int * tctr;
+    tctr = (int *) arg;
+
+    printf("tctr:%d\n",*tctr);
+    printf("detach\n");
+    pthread_detach(pthread_self());
+
+    while(true)
+    {
+        sleep(sleeptimes[*tctr]);// sleep 2 s
+        
+        if(TICC_devices[*tctr].channel > 0 && cmd_Run == true)
+        {
+			printf("init:%d dev_type:%02X\n",*tctr,TICC_devices[*tctr].dev_type);
+			init(TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
+			printf("read\n");
+			if(TICC_devices[*tctr].dev_type == CC2531)
+				zigbee_read(TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
+			if(TICC_devices[*tctr].dev_type == CC2540)
+				btle_read(TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
+		}
+        else if(cmd_Run == false)
+        {
+            printf("shut it down\n");
+            main_shutdown = true;
+        }
+    }
+
+    printf("exit thread\n");
+    pthread_exit(NULL);
+}
 
 static int get_ident(libusb_device_handle *dev)
 {
@@ -191,12 +235,11 @@ static void zigbee_read(libusb_device_handle *dev, int channel)
 	pcap_pkthdr hdr;
 	timeval tp;
 
+    unsigned long int timestamp = time(0);
 	char filename[128];memset(filename,0x00,128);
-	snprintf(filename,128,"zigbee_c%d.pcap",channel);
-	
+	snprintf(filename,128,"zigbee_c%d_%lu.pcap",channel,timestamp);
 	FILE *ptr_myfile;
 	ptr_myfile=fopen(filename, "wb");
-
     pcap_t *pcap;
     /* open pcap context for Raw IP (DLT_RAW), see
      * http://www.tcpdump.org/linktypes.html */
@@ -207,12 +250,9 @@ static void zigbee_read(libusb_device_handle *dev, int channel)
     pcap_dumper_t *d;
     d = pcap_dump_fopen(pcap, ptr_myfile);
     if (d == NULL) {
-        //pcap_perror(pcap, "pcap_dump_fopen");
         printf("error pcap_dump_fopen\n");
         return;
     }
-
-	int ctr=0;
 
     u_char data[1024];
     while (1)
@@ -235,12 +275,14 @@ static void zigbee_read(libusb_device_handle *dev, int channel)
 			// write single IP packet
 			pcap_dump((u_char *)d, &hdr, data);
 
-            ctr++;
-            if(ctr == 10)
-				break;
+            if(cmd_Run == false)
+			    break;
         }
     }
+    
     // finish up
+
+    printf("close the pcap\n");
     pcap_dump_close(d);
 /**
     fclose(ptr_myfile);
@@ -249,13 +291,14 @@ static void zigbee_read(libusb_device_handle *dev, int channel)
 
 static void btle_read(libusb_device_handle *dev, int channel)
 {
-/**
+/**/
 	pcap_pkthdr hdr;
 	timeval tp;
 
+    unsigned long int timestamp = time(0);
 	char filename[128];memset(filename,0x00,128);
-	snprintf(filename,128,"zigbee_c%d.pcap",channel);
-	
+	snprintf(filename,128,"btle_c%d_%lu.pcap",channel,timestamp);
+
 	FILE *ptr_myfile;
 	ptr_myfile=fopen(filename, "wb");
 
@@ -265,7 +308,7 @@ static void btle_read(libusb_device_handle *dev, int channel)
      * http://www.tcpdump.org/linktypes.html */
     //https://wiki.wireshark.org/IEEE_802.15.4
     //https://www.wireshark.org/docs/dfref/z/zbee.nwk.html
-/**
+/**/
 	#define LINKTYPE_BLUETOOTH_LE_LL 251
 	#define LINKTYPE_BLUETOOTH_LE_LL_WITH_PHDR 256
     pcap = pcap_open_dead(LINKTYPE_BLUETOOTH_LE_LL, 65565);
@@ -290,7 +333,7 @@ static void btle_read(libusb_device_handle *dev, int channel)
             for (int i = 0; i < xfer; i++)
                 printf(" %02X", data[i]);
             printf("\n");
-/**
+/**/
 			// prepare for writing
 			gettimeofday(&tp, NULL);
 			hdr.ts.tv_sec = time(0);  // sec
@@ -305,13 +348,9 @@ static void btle_read(libusb_device_handle *dev, int channel)
 				break;
         }
     }
-/**
+/**/
     // finish up
     pcap_dump_close(d);
-/**/
-//not sure if needed
-/**
-    fclose(ptr_myfile);
 /**/
 }
 
@@ -333,7 +372,6 @@ CC2540 idVendor=0x0451, idProduct=0x16b3
     int ret = 0;
     ssize_t count = 0;
 
-
     count = libusb_get_device_list(maincontext, &list);
     assert(count > 0);
 
@@ -348,11 +386,12 @@ CC2540 idVendor=0x0451, idProduct=0x16b3
 		{
 			printf("found CC2531 %d\n",(int)idx);
 			//libusb_device_handle *dev;
-			libusb_open(device,&TICC_dev.dev);
-			assert(TICC_dev.dev != NULL);
+			libusb_open(device,&TICC_devices[TICC_device_ctr].dev);
+			assert(TICC_devices[TICC_device_ctr].dev != NULL);
 			//set type 
-			TICC_dev.dev_type = CC2531;
-			TICC_dev.channel = zigbee_channels[TICC_device_ctr];
+			TICC_devices[TICC_device_ctr].dev_type = CC2531;
+			TICC_devices[TICC_device_ctr].channel = zigbee_channels[TICC_device_ctr];
+			TICC_device_ctr++;
 			//break;
 		}
 		else if(desc.idVendor == 0x11a0 && desc.idProduct == 0xeb20)
@@ -365,11 +404,12 @@ CC2540 idVendor=0x0451, idProduct=0x16b3
 		{
 			printf("found CC2540 %d\n",(int)idx);
 			//libusb_device_handle *dev;
-			libusb_open(device,&TICC_dev.dev);
-			assert(TICC_dev.dev != NULL);
+			libusb_open(device,&TICC_devices[TICC_device_ctr].dev);
+			assert(TICC_devices[TICC_device_ctr].dev != NULL);
 			//set type 
-			TICC_dev.dev_type = CC2540;
-			TICC_dev.channel = btle_channels[TICC_device_ctr];
+			TICC_devices[TICC_device_ctr].dev_type = CC2540;
+			TICC_devices[TICC_device_ctr].channel = btle_channels[TICC_device_ctr];
+			TICC_device_ctr++;
 			//break;
 		}
     }
@@ -410,9 +450,28 @@ int main(int argc, char *argv[])
 {
 	SetupSigHandler();
 
-	TICC_dev.dev=NULL;
-	TICC_dev.dev_type=0;
-	TICC_dev.channel=0;
+	for(int i=0;i<20;i++)
+	{
+		TICC_devices[i].dev=NULL;
+		TICC_devices[i].dev_type=0;
+		TICC_devices[i].channel=0;
+	}
+
+    // Setup threads
+    for(int i=0;i<MaxThreads;i++)
+    {
+        thread_number[i] = i;
+        thread_running[i] = 0;//thread not being used
+        sleeptimes[i] = 1;//have them sleep for 10 sec until we need them
+        if(i == 0)//just set up the first one
+        {
+            if(pthread_create(&workers[i], NULL,
+             (void*(*)(void*))command_thread, (void*)&thread_number[i]) != 0){//(void*)0
+            printf("failed on create Commander thread.");
+            exit(1);
+            }
+        }
+    }
 
     int rc = 0;
     rc = libusb_init(&maincontext);
@@ -423,6 +482,8 @@ int main(int argc, char *argv[])
 	while(true)
 	{
 		sleep(10);
+		if(main_shutdown)//this should wait to be sure the pcap closed
+			break;
 	}
 
     libusb_exit(maincontext);

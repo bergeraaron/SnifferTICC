@@ -1,0 +1,293 @@
+#include <stdbool.h>
+#include <libusb-1.0/libusb.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <assert.h>
+
+#define TIMEOUT 1000
+
+#define DEFAULT_CHANNEL 0x0b // 11
+
+#define DATA_EP_CC2531 0x83
+#define DATA_EP_CC2530 0x82
+#define DATA_EP_CC2540 0x83
+#define DATA_TIMEOUT 2500
+
+#define GET_IDENT 0xC0
+#define SET_POWER 0xC5
+#define GET_POWER 0xC6
+#define SET_START 0xD0
+#define SET_END 0xD1
+#define SET_CHAN 0xD2 // 0x0d (idx 0) + data)0x00 (idx 1)
+#define DIR_OUT 0x40
+#define DIR_IN 0xC0
+
+#define POWER_RETRIES 10
+
+static int get_ident(libusb_device_handle *dev)
+{
+    uint8_t ident[32];
+    int ret;
+    printf("libusb_control_transfer\n"); 
+    ret = libusb_control_transfer(dev, DIR_IN, GET_IDENT, 0x00, 0x00, ident, sizeof(ident), TIMEOUT);
+    printf("print out\n");
+    if (ret > 0) {
+        int i;
+        printf("IDENT:");
+        for (i = 0; i < ret; i++) {
+            printf(" %02X", ident[i]);
+        }
+        printf("\n");
+    }
+    return ret;
+}
+
+static int set_power(libusb_device_handle *dev, uint8_t power, int retries)
+{
+    int ret;
+
+   // set power
+    ret = libusb_control_transfer(dev, DIR_OUT, SET_POWER, 0x00, power, NULL, 0, TIMEOUT);
+    
+    // get power until it is the same as configured in set_power
+    int i;
+    for (i = 0; i < retries; i++) {
+        uint8_t data;
+        ret = libusb_control_transfer(dev, 0xC0, GET_POWER, 0x00, 0x00, &data, 1, TIMEOUT);
+        if (ret < 0) {
+            return ret;
+        }
+        if (data == power) {
+            return 0;
+        }
+    }
+    return ret;
+}
+
+static int set_channel(libusb_device_handle *dev, uint8_t channel)
+{
+    int ret;
+    uint8_t data;
+
+    data = channel & 0xFF;
+    ret = libusb_control_transfer(dev, DIR_OUT, SET_CHAN, 0x00, 0x00, &data, 1, TIMEOUT);
+    if (ret < 0) {
+        printf("setting channel (LSB) failed!\n");
+        return ret;
+    }
+    data = (channel >> 8) & 0xFF;
+    ret = libusb_control_transfer(dev, DIR_OUT, SET_CHAN, 0x00, 0x01, &data, 1, TIMEOUT);
+    if (ret < 0) {
+        printf("setting channel (LSB) failed!\n");
+        return ret;
+    }
+
+    return ret;
+}
+
+static int init(libusb_device_handle *dev, int channel)
+{
+    int ret;
+    
+    // read ident
+    ret = get_ident(dev);
+    if (ret < 0) {
+        printf("getting identity failed!\n");
+        return ret;
+    }
+    
+    // set power
+    ret = set_power(dev, 0x04, POWER_RETRIES);
+    if (ret < 0) {
+        printf("setting power failed!\n");
+        return ret;
+    }
+
+    // ?
+    ret = libusb_control_transfer(dev, DIR_OUT, 0xC9, 0x00, 0x00, NULL, 0, TIMEOUT);
+    if (ret < 0) {
+        printf("setting reg 0xC9 failed!\n");
+        return ret;
+    }
+
+    // set capture channel
+    ret = set_channel(dev, channel);
+    if (ret < 0) {
+        printf("setting channel failed!\n");
+        return ret;
+    }
+
+    // start capture?
+    ret = libusb_control_transfer(dev, DIR_OUT, SET_START, 0x00, 0x00, NULL, 0, TIMEOUT);
+
+    return ret;
+}
+
+static void bulk_read(libusb_device_handle *dev)
+{
+    uint8_t data[1024];
+    while (1) {
+        int xfer = 0;
+        int ret = libusb_bulk_transfer(dev, 0x83, data, sizeof(data), &xfer, TIMEOUT);
+        if (ret == 0) {
+            int i;
+            for (i = 0; i < xfer; i++) {
+                if ((i % 16) == 0) {
+                    printf("\n%04X:", i);
+                }
+                printf(" %02X", data[i]);
+            }
+            printf("\n");
+        }
+    }
+}
+
+static void sniff(libusb_context *context, uint16_t pid, uint16_t vid, int channel)
+{
+    libusb_device_handle *dev = libusb_open_device_with_vid_pid(context, pid, vid);
+    if (dev != NULL) {
+        printf("Opened USB device %04X:%04X\n", pid, vid);
+
+        int ret;
+        ret = setup(dev, channel);
+        if (ret < 0) {
+            printf("Sniffer setup failed!\n");
+        } else {
+            bulk_read(dev);
+        }
+
+        libusb_close(dev);
+    } else {
+        printf("USB device %04X:%04X not found!\n", pid, vid);
+    }
+}
+
+int find_devices()
+{
+
+/**
+CC2531 idVendor=0x0451, idProduct=0x16ae
+CC2530 idVendor=0x11a0, idProduct=0xeb20
+CC2540 idVendor=0x0451, idProduct=0x16b3
+/**/
+
+    libusb_context *context = NULL;
+    libusb_device **list = NULL;
+    int rc = 0;
+    int ret = 0;
+    int found = 0;
+    ssize_t count = 0;
+
+    rc = libusb_init(&context);
+    assert(rc == 0);
+
+    count = libusb_get_device_list(context, &list);
+    assert(count > 0);
+
+    for (size_t idx = 0; idx < count; ++idx) {
+        found = 0;
+        libusb_device *device = list[idx];
+        libusb_device_descriptor desc = {0};
+
+        rc = libusb_get_device_descriptor(device, &desc);
+        assert(rc == 0);
+
+        printf("Vendor:Device = %04x:%04x\n", desc.idVendor, desc.idProduct);
+
+	if(desc.idVendor == 0x0451 && desc.idProduct == 0x16ae)
+	{
+		printf("found CC2531 %d\n",(int)idx);
+		found = 1;
+		break;
+	}
+	else if(desc.idVendor == 0x11a0 && desc.idProduct == 0xeb20)
+	{
+		printf("found CC2530 %d\n",(int)idx);
+		found = 1;
+		break;
+	}
+	else if(desc.idVendor == 0x0451 && desc.idProduct == 0x16b3)
+	{
+		printf("found CC2540 %d\n",(int)idx);
+		found = 1;
+		break;
+	}
+
+    }
+
+    libusb_free_device_list(list, count);
+
+if(found == 1)
+{
+    // read ident
+    libusb_context *devcontext;
+    printf("libusb_init\n");
+    rc = libusb_init(&devcontext);
+    assert(rc == 0);
+    printf("libusb_open_device_with_vid_pid %04x:%04x\n",0x0451, 0x16ae);
+    libusb_device_handle *dev = libusb_open_device_with_vid_pid(devcontext, 0x0451, 0x16ae);
+    assert(dev != NULL);
+
+   /*Check if kenel driver attached*/
+   printf("Check if kenel driver attached\n");
+   if(libusb_kernel_driver_active(dev, 0))
+   {
+      printf("detach driver\n");
+      rc = libusb_detach_kernel_driver(dev, 0); // detach driver
+      assert(rc == 0);
+   }
+   printf("libusb_claim_interface\n");
+   rc = libusb_claim_interface(dev, 0);
+   printf("rc%d\n",rc);
+   //assert(rc < 0);
+
+    //set the configuration
+    printf("set the configuration\n");
+    rc = libusb_set_configuration(dev, -1);
+    assert(rc < 0);
+
+     printf("get_ident\n");
+     ret = get_ident(dev);
+     if (ret < 0) {
+         printf("getting identity failed!\n");
+         return ret;
+     }
+
+    // set power
+    printf("set power\n");
+    ret = set_power(dev, 0x04, POWER_RETRIES);
+    if (ret < 0) {
+        printf("setting power failed!\n");
+        return ret;
+    }
+
+
+}
+
+
+    libusb_exit(context);
+
+}
+
+int main(int argc, char *argv[])
+{
+	find_devices();
+
+/**
+    // channels 37,38,39 are the advertisement channels
+    int channel = 37;
+    if (argc > 1) {
+        channel = atoi(argv[1]);
+    }
+    printf("Sniffing BLE traffic on channel %d\n", channel);
+
+    libusb_context *context;
+    libusb_init(&context);
+    //libusb_set_option(context, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_WARNING);
+    sniff(context, 0x451, 0x16B3, channel);
+    libusb_exit(context);
+/**/
+
+    return 0;
+}
+
