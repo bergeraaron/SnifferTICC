@@ -219,7 +219,7 @@ static void zigbee_read(libusb_device_handle *dev, int channel)
     {
         int xfer = 0;
         int ret = libusb_bulk_transfer(dev, DATA_EP_CC2531, data, sizeof(data), &xfer, TIMEOUT);
-        if (ret == 0)
+        if (ret == 0 && xfer > 7)
         {
             printf("ret:%d xfer:%d\n",ret,xfer);
             for (int i = 0; i < xfer; i++)
@@ -242,9 +242,7 @@ static void zigbee_read(libusb_device_handle *dev, int channel)
     }
     // finish up
     pcap_dump_close(d);
-/**
-    fclose(ptr_myfile);
-/**/
+
 }
 
 static void btle_read(libusb_device_handle *dev, int channel)
@@ -284,7 +282,7 @@ static void btle_read(libusb_device_handle *dev, int channel)
     {
         int xfer = 0;
         int ret = libusb_bulk_transfer(dev, DATA_EP_CC2531, data, sizeof(data), &xfer, TIMEOUT);
-        if (ret == 0)
+        if (ret == 0 && xfer > 7)
         {
             printf("ret:%d xfer:%d\n",ret,xfer);
             for (int i = 0; i < xfer; i++)

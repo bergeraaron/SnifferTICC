@@ -44,7 +44,7 @@ TICC_device TICC_devices[20];
 int TICC_device_ctr = 0;
 
 //zigbee 11-26
-uint8_t zigbee_channels[16] = {20,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26};
+uint8_t zigbee_channels[16] = {11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26};
 //just advertising channels
 uint8_t btle_channels[16] = {37,38,39,37,38,39,37,38,39,37,38,39,37,38,39,37};
 
@@ -259,7 +259,7 @@ static void zigbee_read(libusb_device_handle *dev, int channel)
     {
         int xfer = 0;
         int ret = libusb_bulk_transfer(dev, DATA_EP_CC2531, data, sizeof(data), &xfer, TIMEOUT);
-        if (ret == 0)
+        if (ret == 0 && xfer > 7)
         {
             printf("ret:%d xfer:%d\n",ret,xfer);
             for (int i = 0; i < xfer; i++)
@@ -284,9 +284,7 @@ static void zigbee_read(libusb_device_handle *dev, int channel)
 
     printf("close the pcap\n");
     pcap_dump_close(d);
-/**
-    fclose(ptr_myfile);
-/**/
+
 }
 
 static void btle_read(libusb_device_handle *dev, int channel)
@@ -326,14 +324,14 @@ static void btle_read(libusb_device_handle *dev, int channel)
     while (1)
     {
         int xfer = 0;
-        int ret = libusb_bulk_transfer(dev, DATA_EP_CC2531, data, sizeof(data), &xfer, TIMEOUT);
-        if (ret == 0)
+        int ret = libusb_bulk_transfer(dev, DATA_EP_CC2540, data, sizeof(data), &xfer, TIMEOUT);
+        if (ret == 0 && xfer > 7)
         {
             printf("ret:%d xfer:%d\n",ret,xfer);
             for (int i = 0; i < xfer; i++)
                 printf(" %02X", data[i]);
             printf("\n");
-/**/
+
 			// prepare for writing
 			gettimeofday(&tp, NULL);
 			hdr.ts.tv_sec = time(0);  // sec
@@ -342,16 +340,15 @@ static void btle_read(libusb_device_handle *dev, int channel)
 
 			// write single IP packet
 			pcap_dump((u_char *)d, &hdr, data);
-/**/
-            ctr++;
-            if(ctr == 10)
-				break;
+
+            if(cmd_Run == false)
+			    break;
         }
     }
-/**/
+
     // finish up
     pcap_dump_close(d);
-/**/
+
 }
 
 int find_devices()
