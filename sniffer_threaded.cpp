@@ -43,6 +43,9 @@ struct TICC_device
 TICC_device TICC_devices[20];
 int TICC_device_ctr = 0;
 
+char u_file_name[64];
+bool debug_output = false;
+
 //zigbee 11-26
 uint8_t zigbee_channels[16] = {11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26};
 //just advertising channels
@@ -261,7 +264,7 @@ static void zigbee_read(libusb_device_handle *dev, int channel)
         int ret = libusb_bulk_transfer(dev, DATA_EP_CC2531, data, sizeof(data), &xfer, TIMEOUT);
         if (ret == 0 && xfer > 7)
         {
-            printf("ret:%d xfer:%d\n",ret,xfer);
+            printf("channel:%d ret:%d xfer:%d\n",channel,ret,xfer);
             for (int i = 0; i < xfer; i++)
                 printf(" %02X", data[i]);
             printf("\n");
@@ -443,6 +446,42 @@ void SetupSigHandler()
   signal(SIGINT,  SigHandler);
 }
 
+int parse_cmd_line(int argc, char *argv[])
+{
+
+        if(argc <= 1)
+        {
+            printf("Usage:\n ./sniffer_threaded <options>\n");
+            printf("\t-----OPTIONS-----\n");
+            printf("\t-c\tchannel\n");
+            printf("\t-o\toutput file\n");
+            return 0;
+        }
+        else
+        {
+            for(int we=0;we < argc; we++)
+            {
+                printf("%d %s\n",we,argv[we]);
+                if(strcmp(argv[we],"-c") == 0)
+                {
+                    printf("we have a channel\n");
+                }
+                if(strcmp(argv[we],"-o") == 0)
+                {
+                    printf("we have a output file\n");
+                }
+                if(strcmp(argv[we],"-k") == 0)
+                {
+
+                }
+                if(strcmp(argv[we],"-m") == 0)
+                {
+
+                }
+            }
+        }
+}
+
 int main(int argc, char *argv[])
 {
 	SetupSigHandler();
@@ -460,13 +499,13 @@ int main(int argc, char *argv[])
         thread_number[i] = i;
         thread_running[i] = 0;//thread not being used
         sleeptimes[i] = 1;//have them sleep for 10 sec until we need them
-        if(i == 0)//just set up the first one
-        {
+//        if(i == 0)//just set up the first one
+//        {
             if(pthread_create(&workers[i], NULL,
              (void*(*)(void*))command_thread, (void*)&thread_number[i]) != 0){//(void*)0
             printf("failed on create Commander thread.");
             exit(1);
-            }
+//            }
         }
     }
 
@@ -482,8 +521,18 @@ int main(int argc, char *argv[])
 		if(main_shutdown)//this should wait to be sure the pcap closed
 			break;
 	}
-
-    libusb_exit(maincontext);
+    printf("close all of the libusb\n");
+    for(int i=0;i<MaxThreads;i++)
+    {
+        if(TICC_devices[i].channel > 0)
+        {
+            libusb_release_interface(TICC_devices[i].dev,i);
+			libusb_close(TICC_devices[i].dev);
+		}
+    }
+    //double free?
+    //printf("libusb_exit\n");
+    //libusb_exit(maincontext);
 	return 0;
 }
 
