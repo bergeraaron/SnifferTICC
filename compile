@@ -1,2 +1,1 @@
 g++ sniffer.cpp -o sniffer -lusb-1.0 -lpcap -lpthread
-g++ sniffer_threaded.cpp -o sniffer_threaded -lusb-1.0 -lpcap -lpthread
