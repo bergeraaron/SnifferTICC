@@ -1,71 +1,10 @@
-#include <stdbool.h>
-#include <time.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <signal.h>
-#include <assert.h>
-#include <unistd.h>
-#include <pthread.h>
-#include <libusb-1.0/libusb.h>
-#include <pcap.h>
+#include "sniffer.h"
 
-#define TIMEOUT 1000
+extern TICC_device TICC_devices[20];
+extern int TICC_device_ctr;
 
-#define DEFAULT_CHANNEL 0x0b // 11
-
-#define DATA_EP_CC2531 0x83
-#define DATA_EP_CC2530 0x82
-#define DATA_EP_CC2540 0x83
-#define DATA_TIMEOUT 2500
-
-#define GET_IDENT 0xC0
-#define SET_POWER 0xC5
-#define GET_POWER 0xC6
-#define SET_START 0xD0
-#define SET_END   0xD1
-#define SET_CHAN  0xD2 // 0x0d (idx 0) + data)0x00 (idx 1)
-#define DIR_OUT   0x40
-#define DIR_IN    0xC0
-
-#define POWER_RETRIES 10
-
-#define CC2531 0x01
-#define CC2540 0x02
-
-//thread stuff
-#define MaxThreads 20
-pthread_t workers[MaxThreads];
-unsigned short sleeptimes[MaxThreads];
-int thread_running[MaxThreads];
-int thread_number[MaxThreads];
-//mutexes one for the zigbee file and one for the btle file
-pthread_mutex_t ZigbeeMutex;
-pthread_mutex_t BtleMutex;
-
-struct TICC_device
-{
-	libusb_device_handle *dev;
-	uint8_t channel;
-	u_char dev_type;
-	bool configured;
-	unsigned int pkt_ctr;
-};
-TICC_device TICC_devices[MaxThreads];
-int TICC_device_ctr = 0;
-
-char u_file_name[64];
-bool debug_output = true;
-
-//zigbee 11-26
-uint8_t zigbee_channels[16] = {11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26};
-//just advertising channels
-uint8_t btle_channels[16] = {37,38,39,37,38,39,37,38,39,37,38,39,37,38,39,37};
-
-libusb_context *maincontext = NULL;
-
-bool cmd_Run = true;
-bool main_shutdown = false;
+extern bool m_zigbee;
+extern bool m_bt;
 
 //zigbee pcap packet info
 pcap_pkthdr z_hdr;
@@ -76,40 +15,7 @@ pcap_pkthdr bt_hdr;
 pcap_t *bt_pcap;
 pcap_dumper_t *bt_d;
 
-
-//function definitions
-void setup_struct();
-void setup_threads();
-void* command_thread(void * arg);
-int get_ident(libusb_device_handle *dev);
-int set_power(libusb_device_handle *dev, uint8_t power, int retries);
-int set_channel(libusb_device_handle *dev, uint8_t channel);
-int init(libusb_device_handle *dev, int channel);
-int parse_cmd_line(int argc, char *argv[]);
-void setup_zigbee_pcap();
-void write_zigbee_pcap(unsigned char * data, int xfer);
-void close_zigbee_pcap();
-void zigbee_read(libusb_device_handle *dev, int channel);
-void setup_btle_pcap();
-void btle_read(libusb_device_handle *dev, int channel);
-void write_btle_pcap(unsigned char * data, int xfer);
-void close_btle_pcap();
-int find_devices();
-int find_num_devices(int& zigbee,int& btle);
-void SigHandler(int sig);
-void SetupSigHandler();
-
 //functions
-void setup_struct()
-{
-        for(int i=0;i<MaxThreads;i++)
-        {
-                TICC_devices[i].dev=NULL;
-                TICC_devices[i].dev_type=0;
-                TICC_devices[i].channel=0;
-                TICC_devices[i].pkt_ctr=0;
-        }
-}
 void setup_threads()
 {
     // Setup threads
@@ -118,240 +24,98 @@ void setup_threads()
         thread_number[i] = i;
         thread_running[i] = 0;//thread not being used
         sleeptimes[i] = 1;//have them sleep for 10 sec until we need them
-//        if(i == 0)//just set up the first one
-//        {
-            if(pthread_create(&workers[i], NULL,
-             (void*(*)(void*))command_thread, (void*)&thread_number[i]) != 0){//(void*)0
-            printf("failed on create Commander thread.");
-            exit(1);
-//            }
+
+        if(pthread_create(&workers[i], NULL,
+        (void*(*)(void*))command_thread, (void*)&thread_number[i]) != 0){//(void*)0
+        printf("failed on create Commander thread.");
+        exit(1);
         }
     }
 }
 
 void* command_thread(void * arg)
 {
-if(debug_output)
-    printf("command thread \n");
+    if(debug_output)
+        printf("command thread \n");
     int * tctr;
     tctr = (int *) arg;
-if(debug_output)
-{
-    printf("tctr:%d\n",*tctr);
-    printf("detach\n");
-}
+    if(debug_output)
+    {
+        printf("tctr:%d\n",*tctr);
+        printf("detach\n");
+    }
     pthread_detach(pthread_self());
 
     while(true)
     {
         sleep(sleeptimes[*tctr]);// sleep 2 s
-        
+
         if(TICC_devices[*tctr].channel > 0 && cmd_Run == true)
         {
-if(debug_output)
-			printf("init:%d dev_type:%02X\n",*tctr,TICC_devices[*tctr].dev_type);
-			init(TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
-			TICC_devices[*tctr].configured = true;
-if(debug_output)
-			printf("read\n");
-			if(TICC_devices[*tctr].dev_type == CC2531)
-				zigbee_read(TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
-			if(TICC_devices[*tctr].dev_type == CC2540)
-				btle_read(TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
-		}
+            if(debug_output)
+                printf("init:%d dev_type:%02X\n",*tctr,TICC_devices[*tctr].dev_type);
+            init(TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
+            TICC_devices[*tctr].configured = true;
+            if(debug_output)
+                printf("read\n");
+            if(TICC_devices[*tctr].dev_type == CC2531)
+                zigbee_read(TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
+            if(TICC_devices[*tctr].dev_type == CC2540)
+                btle_read(TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
+        }
         else if(cmd_Run == false)
         {
             printf("shut down thread :%d\n",*tctr);
             main_shutdown = true;
         }
     }
-if(debug_output)
+    if(debug_output)
     printf("exit thread\n");
     pthread_exit(NULL);
 }
 
-int get_ident(libusb_device_handle *dev)
-{
-    uint8_t ident[32];
-    int ret;
-if(debug_output)
-    printf("libusb_control_transfer\n"); 
-    ret = libusb_control_transfer(dev, DIR_IN, GET_IDENT, 0x00, 0x00, ident, sizeof(ident), TIMEOUT);
-if(debug_output)
-{
-    printf("print out\n");
-    if (ret > 0) {
-        int i;
-        printf("IDENT:");
-        for (i = 0; i < ret; i++) {
-            printf(" %02X", ident[i]);
-        }
-        printf("\n");
-    }
-}
-    return ret;
-}
-
-int set_power(libusb_device_handle *dev, uint8_t power, int retries)
-{
-    int ret;
-
-   // set power
-    ret = libusb_control_transfer(dev, DIR_OUT, SET_POWER, 0x00, power, NULL, 0, TIMEOUT);
-    
-    // get power until it is the same as configured in set_power
-    int i;
-    for (i = 0; i < retries; i++) {
-        uint8_t data;
-        ret = libusb_control_transfer(dev, 0xC0, GET_POWER, 0x00, 0x00, &data, 1, TIMEOUT);
-        if (ret < 0) {
-            return ret;
-        }
-        if (data == power) {
-            return 0;
-        }
-    }
-    return ret;
-}
-
-int set_channel(libusb_device_handle *dev, uint8_t channel)
-{
-    int ret;
-    uint8_t data;
-
-    data = channel & 0xFF;
-    ret = libusb_control_transfer(dev, DIR_OUT, SET_CHAN, 0x00, 0x00, &data, 1, TIMEOUT);
-    if (ret < 0) {
-if(debug_output)
-        printf("setting channel (LSB) failed!\n");
-        return ret;
-    }
-    data = (channel >> 8) & 0xFF;
-    ret = libusb_control_transfer(dev, DIR_OUT, SET_CHAN, 0x00, 0x01, &data, 1, TIMEOUT);
-    if (ret < 0) {
-if(debug_output)
-        printf("setting channel (LSB) failed!\n");
-        return ret;
-    }
-
-    return ret;
-}
-
-int init(libusb_device_handle *dev, int channel)
-{
-    int ret;
-    int rc = 0; 
-   /*Check if kenel driver attached*/
-if(debug_output)
-   printf("Check if kernel driver attached\n");
-   if(libusb_kernel_driver_active(dev, 0))
-   {
-if(debug_output)
-      printf("detach driver\n");
-      rc = libusb_detach_kernel_driver(dev, 0); // detach driver
-      assert(rc == 0);
-   }
-if(debug_output)
-   printf("libusb_claim_interface\n");
-   rc = libusb_claim_interface(dev, 0);
-if(debug_output)
-   printf("rc%d\n",rc);
-   //assert(rc < 0);
-
-    //set the configuration
-if(debug_output)
-    printf("set the configuration\n");
-    rc = libusb_set_configuration(dev, -1);
-    assert(rc < 0);
- 
-    // read ident
-if(debug_output)
-    printf("read ident\n");
-    ret = get_ident(dev);
-    if (ret < 0) {
-if(debug_output)
-        printf("getting identity failed!\n");
-        return ret;
-    }
-    
-    // set power
-if(debug_output)
-    printf("set power\n");
-    ret = set_power(dev, 0x04, POWER_RETRIES);
-    if (ret < 0) {
-if(debug_output)
-        printf("setting power failed!\n");
-        return ret;
-    }
-/**
-    // ?
-    ret = libusb_control_transfer(dev, DIR_OUT, 0xC9, 0x00, 0x00, NULL, 0, TIMEOUT);
-    if (ret < 0) {
-if(debug_output)
-        printf("setting reg 0xC9 failed!\n");
-        return ret;
-    }
-/**/
-    
-    // set capture channel
-if(debug_output)
-    printf("set capture channel %d\n",channel);
-    ret = set_channel(dev, channel);
-    if (ret < 0) {
-if(debug_output)
-        printf("setting channel failed!\n");
-        return ret;
-    }
-
-    // start capture?
-if(debug_output)
-    printf("start capture?\n");
-    ret = libusb_control_transfer(dev, DIR_OUT, SET_START, 0x00, 0x00, NULL, 0, TIMEOUT);
-
-    return ret;
-}
-
 void setup_zigbee_pcap()
 {
-	/* open pcap context for Raw IP (DLT_RAW), see
-	* http://www.tcpdump.org/linktypes.html */
-	//https://wiki.wireshark.org/IEEE_802.15.4
-	//https://www.wireshark.org/docs/dfref/z/zbee.nwk.html
+    /* open pcap context for Raw IP (DLT_RAW), see
+    * http://www.tcpdump.org/linktypes.html */
+    //https://wiki.wireshark.org/IEEE_802.15.4
+    //https://www.wireshark.org/docs/dfref/z/zbee.nwk.html
 
-	//open file
-	unsigned long int timestamp = time(0);
-	char filename[128];memset(filename,0x00,128);
-        snprintf(filename,128,"zigbee_%lu.pcap",timestamp);
-        FILE *ptr_zfile;
-        ptr_zfile=fopen(filename, "wb");
-	
-	z_pcap = pcap_open_dead(195, 65565);//LINKTYPE_IEEE802_15_4_WITHFCS
-	z_d = pcap_dump_fopen(z_pcap, ptr_zfile);
-	if (z_d == NULL) {
-		printf("error pcap_dump_fopen\n");
-		return;
-	}
+    //open file
+    unsigned long int timestamp = time(0);
+    char filename[128];memset(filename,0x00,128);
+    snprintf(filename,128,"zigbee_%lu.pcap",timestamp);
+    FILE *ptr_zfile;
+    ptr_zfile=fopen(filename, "wb");
+
+    z_pcap = pcap_open_dead(195, 65565);//LINKTYPE_IEEE802_15_4_WITHFCS
+    z_d = pcap_dump_fopen(z_pcap, ptr_zfile);
+    if (z_d == NULL)
+    {
+        printf("error pcap_dump_fopen\n");
+        return;
+    }
 }
 
 void write_zigbee_pcap(unsigned char * data, int xfer)
 {
-	// prepare for writing
-	timeval tp;
-	gettimeofday(&tp, NULL);
-	z_hdr.ts.tv_sec = time(0);  // sec
-	z_hdr.ts.tv_usec = tp.tv_sec * 1000 + tp.tv_usec / 1000; // ms
-        z_hdr.caplen = z_hdr.len = xfer;
-	// write single IP packet
-	pthread_mutex_lock(&ZigbeeMutex);
-        pcap_dump((u_char *)z_d, &z_hdr, data);
-	pthread_mutex_unlock(&ZigbeeMutex);
+    // prepare for writing
+    timeval tp;
+    gettimeofday(&tp, NULL);
+    z_hdr.ts.tv_sec = time(0);  // sec
+    z_hdr.ts.tv_usec = tp.tv_sec * 1000 + tp.tv_usec / 1000; // ms
+    z_hdr.caplen = z_hdr.len = xfer;
+    // write single IP packet
+    pthread_mutex_lock(&ZigbeeMutex);
+    pcap_dump((u_char *)z_d, &z_hdr, data);
+    pthread_mutex_unlock(&ZigbeeMutex);
 }
 
 void close_zigbee_pcap()
 {
-	if(debug_output)
-		printf("close the pcap\n");
-	pcap_dump_close(z_d);
+    if(debug_output)
+        printf("close the pcap\n");
+    pcap_dump_close(z_d);
 }
 
 void zigbee_read(libusb_device_handle *dev, int channel)
@@ -363,73 +127,71 @@ void zigbee_read(libusb_device_handle *dev, int channel)
         int ret = libusb_bulk_transfer(dev, DATA_EP_CC2531, data, sizeof(data), &xfer, TIMEOUT);
         if (ret == 0 && xfer > 7)
         {
-if(debug_output)
-{
-            printf("channel:%d ret:%d xfer:%d\n",channel,ret,xfer);
-            for (int i = 0; i < xfer; i++)
-                printf(" %02X", data[i]);
-            printf("\n");
-}
+            if(debug_output)
+            {
+                printf("channel:%d ret:%d xfer:%d\n",channel,ret,xfer);
+                for (int i = 0; i < xfer; i++)
+                    printf(" %02X", data[i]);
+                printf("\n");
+            }
 
-	write_zigbee_pcap(data, xfer);	
+            write_zigbee_pcap(data, xfer);	
 
-		if(cmd_Run == false)
-			break;
+            if(cmd_Run == false)
+                break;
         }
     }
-
 }
 
 void setup_btle_pcap()
 {
-        /* open pcap context for Raw IP (DLT_RAW), see
-        * http://www.tcpdump.org/linktypes.html */
-        //https://wiki.wireshark.org/IEEE_802.15.4
-        //https://www.wireshark.org/docs/dfref/z/zbee.nwk.html
+    /* open pcap context for Raw IP (DLT_RAW), see
+    * http://www.tcpdump.org/linktypes.html */
+    //https://wiki.wireshark.org/IEEE_802.15.4
+    //https://www.wireshark.org/docs/dfref/z/zbee.nwk.html
 
-        //open file
-	unsigned long int timestamp = time(0);
-        char filename[128];memset(filename,0x00,128);
-        snprintf(filename,128,"btle_%lu.pcap",timestamp);
-        FILE *ptr_btfile;
-        ptr_btfile=fopen(filename, "wb");
+    //open file
+    unsigned long int timestamp = time(0);
+    char filename[128];memset(filename,0x00,128);
+    snprintf(filename,128,"btle_%lu.pcap",timestamp);
+    FILE *ptr_btfile;
+    ptr_btfile=fopen(filename, "wb");
 
-        //#define LINKTYPE_BLUETOOTH_LE_LL 251
-        //#define LINKTYPE_BLUETOOTH_LE_LL_WITH_PHDR 256
+    //#define LINKTYPE_BLUETOOTH_LE_LL 251
+    //#define LINKTYPE_BLUETOOTH_LE_LL_WITH_PHDR 256
 
-        bt_pcap = pcap_open_dead(251, 65565);//LINKTYPE_BLUETOOTH_LE_LL
-        bt_d = pcap_dump_fopen(bt_pcap, ptr_btfile);
-        if (bt_d == NULL) {
-                printf("error pcap_dump_fopen\n");
-                return;
-        }
+    bt_pcap = pcap_open_dead(251, 65565);//LINKTYPE_BLUETOOTH_LE_LL
+    bt_d = pcap_dump_fopen(bt_pcap, ptr_btfile);
+    if (bt_d == NULL)
+    {
+        printf("error pcap_dump_fopen\n");
+        return;
+    }
 }
 
 void write_btle_pcap(unsigned char * data, int xfer)
 {
-        // prepare for writing
-	timeval tp;
-        gettimeofday(&tp, NULL);
-        bt_hdr.ts.tv_sec = time(0);  // sec
-        bt_hdr.ts.tv_usec = tp.tv_sec * 1000 + tp.tv_usec / 1000; // ms
-        bt_hdr.caplen = bt_hdr.len = xfer;
-        // write single IP packet
-        pthread_mutex_lock(&BtleMutex);
-        pcap_dump((u_char *)bt_d, &bt_hdr, data);
-        pthread_mutex_unlock(&BtleMutex);
+    // prepare for writing
+    timeval tp;
+    gettimeofday(&tp, NULL);
+    bt_hdr.ts.tv_sec = time(0);  // sec
+    bt_hdr.ts.tv_usec = tp.tv_sec * 1000 + tp.tv_usec / 1000; // ms
+    bt_hdr.caplen = bt_hdr.len = xfer;
+    // write single IP packet
+    pthread_mutex_lock(&BtleMutex);
+    pcap_dump((u_char *)bt_d, &bt_hdr, data);
+    pthread_mutex_unlock(&BtleMutex);
 }
 
 void close_btle_pcap()
 {
-        if(debug_output)
-                printf("close the pcap\n");
-        pcap_dump_close(bt_d);
+    if(debug_output)
+        printf("close the pcap\n");
+    pcap_dump_close(bt_d);
 }
-
 
 void btle_read(libusb_device_handle *dev, int channel)
 {
-
     u_char data[1024];
     while (1)
     {
@@ -437,130 +199,20 @@ void btle_read(libusb_device_handle *dev, int channel)
         int ret = libusb_bulk_transfer(dev, DATA_EP_CC2540, data, sizeof(data), &xfer, TIMEOUT);
         if (ret == 0 && xfer > 7)
         {
-if(debug_output)
-{
-            printf("ret:%d xfer:%d\n",ret,xfer);
-            for (int i = 0; i < xfer; i++)
-                printf(" %02X", data[i]);
-            printf("\n");
-}
+            if(debug_output)
+            {
+                printf("ret:%d xfer:%d\n",ret,xfer);
+                for (int i = 0; i < xfer; i++)
+                    printf(" %02X", data[i]);
+                printf("\n");
+            }
 
-	write_btle_pcap(data, xfer);
+            write_btle_pcap(data, xfer);
 
             if(cmd_Run == false)
-			    break;
+                break;
         }
     }
-
-}
-int find_num_devices(int& zigbee,int& btle)
-{
-
-/**
-CC2531 idVendor=0x0451, idProduct=0x16ae
-CC2530 idVendor=0x11a0, idProduct=0xeb20
-CC2540 idVendor=0x0451, idProduct=0x16b3
-/**/
-
-    libusb_device **list = NULL;
-
-    libusb_device *device;
-    libusb_device_descriptor desc = {0};
-
-    int rc = 0;
-    int ret = 0;
-    ssize_t count = 0;
-
-    count = libusb_get_device_list(maincontext, &list);
-    assert(count > 0);
-
-    for (size_t idx = 0; idx < count; ++idx) {
-        device = list[idx];
-        rc = libusb_get_device_descriptor(device, &desc);
-        assert(rc == 0);
-if(debug_output)
-        printf("Vendor:Device = %04x:%04x\n", desc.idVendor, desc.idProduct);
-
-                if(desc.idVendor == 0x0451 && desc.idProduct == 0x16ae)
-                {
-                        printf("found CC2531 %d\n",(int)idx);
-			zigbee++;
-                }
-                else if(desc.idVendor == 0x11a0 && desc.idProduct == 0xeb20)
-                {
-                        //probably won't have any of these
-                        printf("found CC2530 %d\n",(int)idx);
-                }
-                else if(desc.idVendor == 0x0451 && desc.idProduct == 0x16b3)
-                {
-                        printf("found CC2540 %d\n",(int)idx);
-                	btle++;
-		}
-    }
-    libusb_free_device_list(list, count);
-
-	printf("zigbee:%d btle:%d\n",zigbee,btle);
-}
-int find_devices()
-{
-
-/**
-CC2531 idVendor=0x0451, idProduct=0x16ae
-CC2530 idVendor=0x11a0, idProduct=0xeb20
-CC2540 idVendor=0x0451, idProduct=0x16b3
-/**/
-
-    libusb_device **list = NULL;
-    
-    libusb_device *device;
-    libusb_device_descriptor desc = {0};
-
-    int rc = 0;
-    int ret = 0;
-    ssize_t count = 0;
-
-    count = libusb_get_device_list(maincontext, &list);
-    assert(count > 0);
-
-    for (size_t idx = 0; idx < count; ++idx) {
-        device = list[idx];
-        rc = libusb_get_device_descriptor(device, &desc);
-        assert(rc == 0);
-if(debug_output)
-        printf("Vendor:Device = %04x:%04x\n", desc.idVendor, desc.idProduct);
-
-		if(desc.idVendor == 0x0451 && desc.idProduct == 0x16ae)
-		{
-			printf("found CC2531 %d\n",(int)idx);
-			//libusb_device_handle *dev;
-			libusb_open(device,&TICC_devices[TICC_device_ctr].dev);
-			assert(TICC_devices[TICC_device_ctr].dev != NULL);
-			//set type 
-			TICC_devices[TICC_device_ctr].dev_type = CC2531;
-			TICC_devices[TICC_device_ctr].channel = zigbee_channels[TICC_device_ctr];
-			TICC_device_ctr++;
-			//break;
-		}
-		else if(desc.idVendor == 0x11a0 && desc.idProduct == 0xeb20)
-		{
-			//probably won't have any of these
-			printf("found CC2530 %d\n",(int)idx);
-			//break;
-		}
-		else if(desc.idVendor == 0x0451 && desc.idProduct == 0x16b3)
-		{
-			printf("found CC2540 %d\n",(int)idx);
-			//libusb_device_handle *dev;
-			libusb_open(device,&TICC_devices[TICC_device_ctr].dev);
-			assert(TICC_devices[TICC_device_ctr].dev != NULL);
-			//set type 
-			TICC_devices[TICC_device_ctr].dev_type = CC2540;
-			TICC_devices[TICC_device_ctr].channel = btle_channels[TICC_device_ctr];
-			TICC_device_ctr++;
-			//break;
-		}
-    }
-    libusb_free_device_list(list, count);
 }
 
 int parse_cmd_line(int argc, char *argv[])
@@ -573,6 +225,8 @@ int parse_cmd_line(int argc, char *argv[])
         printf("\t-c\tchannel\n");
         printf("\t-o\toutput file\n");
         printf("\t-d\tdebug output\n");
+        printf("\t-i zb \tignore zigbee devices\n");
+        printf("\t-i bt \tignore bluetooth devices\n");
         return 0;
     }
     else
@@ -585,118 +239,127 @@ int parse_cmd_line(int argc, char *argv[])
                 printf("we have a channel\n");
                 //TICC_dev.channel = atoi(argv[we+1]);
             }
-            if(strcmp(argv[we],"-o") == 0)
+            else if(strcmp(argv[we],"-o") == 0)
             {
                 printf("we have a output file\n");
                 snprintf(u_file_name,64,"%s",argv[we+1]);
             }
-            if(strcmp(argv[we],"-d") == 0)
+            else if(strcmp(argv[we],"-d") == 0)
             {
                 debug_output = true;
+            }
+            else if(strcmp(argv[we],"-i") == 0)//ignore something
+            {
+                if(strcmp(argv[we+1],"zb") == 0)//ignore zigbee
+                {
+                    m_zigbee = false;
+                }
+                else if(strcmp(argv[we+1],"bt") == 0)//ignore bluetooth
+                {
+                    m_bt = false;
+                }
             }
         }
         return 1;
     }
 }
 
-
 void SigHandler(int sig)
 {
-  switch(sig) {
-    case SIGHUP:
-      break;
-    case SIGTERM:
-    case SIGINT:
-      if(cmd_Run) {
-        cmd_Run = false;
-        printf("\nShutdown received.");
-      } else { // we already sent the shutdown signal
-
-        printf("Emergency shutdown.");
-        exit(1);
-      }
-      break;
-  }
+    switch(sig)
+    {
+        case SIGHUP:
+            break;
+        case SIGTERM:
+        case SIGINT:
+        if(cmd_Run)
+        {
+            cmd_Run = false;
+            printf("\nShutdown received.");
+        }
+        else
+        { // we already sent the shutdown signal
+            printf("Emergency shutdown.");
+           exit(1);
+        }
+        break;
+    }
 }
 
 void SetupSigHandler()
 {
-  signal(SIGCHLD, SIG_IGN);  // ignore child
-  signal(SIGTSTP, SIG_IGN);  // ignore tty signals
-  signal(SIGTTOU, SIG_IGN);  // ignore background write attempts
-  signal(SIGTTIN, SIG_IGN);  // ignore background read attempts
-  signal(SIGHUP,  SigHandler);
-  signal(SIGTERM, SigHandler);
-  signal(SIGINT,  SigHandler);
+    signal(SIGCHLD, SIG_IGN);  // ignore child
+    signal(SIGTSTP, SIG_IGN);  // ignore tty signals
+    signal(SIGTTOU, SIG_IGN);  // ignore background write attempts
+    signal(SIGTTIN, SIG_IGN);  // ignore background read attempts
+    signal(SIGHUP,  SigHandler);
+    signal(SIGTERM, SigHandler);
+    signal(SIGINT,  SigHandler);
 }
-
 
 int main(int argc, char *argv[])
 {
-	parse_cmd_line(argc, argv);
-	SetupSigHandler();
+    parse_cmd_line(argc, argv);
+    SetupSigHandler();
 
-	int rc = 0;
-	rc = libusb_init(&maincontext);
-	 assert(rc == 0);
+    usb_lib_init();
 
-	int zigbee = 0;
-	int btle = 0;
+    int zigbee = 0;
+    int btle = 0;
 
-	find_num_devices(zigbee,btle);
-	printf("num zigbee:%d btle:%d\n",zigbee,btle);
+    find_num_devices(zigbee,btle);
+    printf("num zigbee:%d btle:%d\n",zigbee,btle);
 
-	if(zigbee == 0 && btle == 0)
-	{
-		printf("No supported devices found\n");
-		return 0;
-	}
+    if(zigbee == 0 && btle == 0)
+    {
+        printf("No supported devices found\n");
+        return 0;
+    }
 
-	setup_zigbee_pcap();
-	setup_btle_pcap();
+    setup_zigbee_pcap();
+    setup_btle_pcap();
 
-	setup_struct();
+    setup_struct();
 
-	// Setup threads
-	setup_threads();
+    // Setup threads
+    setup_threads();
 
-	find_devices();
+    find_devices();
 
-	while(true)
-	{
-		sleep(10);
-		if(main_shutdown)//this should wait to be sure the pcap closed
-			break;
+    while(true)
+    {
+        sleep(10);
+        if(main_shutdown)//this should wait to be sure the pcap closed
+            break;
 
-		//print packet counts
-		for(int i=0;i<20;i++)
-		{
-			if(TICC_devices[i].configured)
-			{
-				printf("Channel:%d PktCnt:%d\n",TICC_devices[i].channel,TICC_devices[i].pkt_ctr);
-			}
-		}
-		printf("\n\n");
-	}
-if(debug_output)
-    printf("close all of the libusb\n");
+        //print packet counts
+        for(int i=0;i<20;i++)
+        {
+            if(TICC_devices[i].configured)
+            {
+                printf("Channel:%d PktCnt:%d\n",TICC_devices[i].channel,TICC_devices[i].pkt_ctr);
+            }
+        }
+        printf("\n\n");
+    }
+    if(debug_output)
+        printf("close all of the libusb\n");
     for(int i=0;i<MaxThreads;i++)
     {
         if(TICC_devices[i].channel > 0)
         {
             libusb_release_interface(TICC_devices[i].dev,i);
-			libusb_close(TICC_devices[i].dev);
-	}
+            libusb_close(TICC_devices[i].dev);
+        }
     }
 
-//close files if open
-close_zigbee_pcap();
-close_btle_pcap();
-
+    //close files if open
+    close_zigbee_pcap();
+    close_btle_pcap();
 
     //double free?
     //printf("libusb_exit\n");
     //libusb_exit(maincontext);
-	return 0;
+    return 0;
 }
 

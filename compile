@@ -1,1 +1,4 @@
-g++ sniffer.cpp -o sniffer -lusb-1.0 -lpcap -lpthread
+rm *.o
+g++ -c usb.cpp -o usb.o
+g++ -c sniffer.cpp -o sniffer.o
+g++ usb.o sniffer.o -o sniffer -lusb-1.0 -lpcap -lpthread
