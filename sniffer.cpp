@@ -56,8 +56,11 @@ void* command_thread(void * arg)
         {
             if(debug_output)
                 printf("init:%d dev_type:%02X\n",*tctr,TICC_devices[*tctr].dev_type);
+	    //think I have a problem with the inita nd threading
+            pthread_mutex_lock(&StructMutex);
             init(TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
             TICC_devices[*tctr].configured = true;
+            pthread_mutex_unlock(&StructMutex);
             if(debug_output)
                 printf("read\n");
             if(TICC_devices[*tctr].dev_type == CC2531)
@@ -132,7 +135,9 @@ void zigbee_read(int tctr, libusb_device_handle *dev, int channel)
     while (1)
     {
         int xfer = 0;
+        pthread_mutex_lock(&UsbMutex);
         int ret = libusb_bulk_transfer(dev, DATA_EP_CC2531, data, sizeof(data), &xfer, TIMEOUT);
+        pthread_mutex_unlock(&UsbMutex);
         if (ret == 0 && xfer > 7)
         {
             if(debug_output)
@@ -142,8 +147,9 @@ void zigbee_read(int tctr, libusb_device_handle *dev, int channel)
                     printf(" %02X", data[i]);
                 printf("\n");
             }
-
+            pthread_mutex_lock(&StructMutex);
             TICC_devices[tctr].pkt_ctr++;
+            pthread_mutex_unlock(&StructMutex);
 
             write_zigbee_pcap(data, xfer);	
 
@@ -209,7 +215,9 @@ void btle_read(int tctr, libusb_device_handle *dev, int channel)
     while (1)
     {
         int xfer = 0;
+        pthread_mutex_lock(&UsbMutex);
         int ret = libusb_bulk_transfer(dev, DATA_EP_CC2540, data, sizeof(data), &xfer, TIMEOUT);
+        pthread_mutex_unlock(&UsbMutex);
         if (ret == 0 && xfer > 7)
         {
             if(debug_output)
@@ -219,8 +227,9 @@ void btle_read(int tctr, libusb_device_handle *dev, int channel)
                     printf(" %02X", data[i]);
                 printf("\n");
             }
-
+            pthread_mutex_lock(&StructMutex);
             TICC_devices[tctr].pkt_ctr++;
+            pthread_mutex_unlock(&StructMutex);
 
             write_btle_pcap(data, xfer);
 
@@ -302,8 +311,10 @@ void SigHandler(int sig)
            {
                if(TICC_devices[i].channel > 0)
                {
+                    pthread_mutex_lock(&StructMutex);
                     libusb_release_interface(TICC_devices[i].dev,i);
                     libusb_close(TICC_devices[i].dev);
+                    pthread_mutex_unlock(&StructMutex);
                }
            }
 
@@ -350,6 +361,7 @@ int main(int argc, char *argv[])
         for(int i=0;i<10;i++)
             print_status(i+2,1,11,i);
 
+        print_running_status(cmd_Run);
         getch();			/* Wait for user input */
         end_ncurses();
         printf("No supported devices found\n");
@@ -367,19 +379,26 @@ int main(int argc, char *argv[])
 
     find_devices();
 
+    int main_ctr = 0;
+
     while(true)
     {
-        sleep(30);
         if(main_shutdown)//this should wait to be sure the pcap closed
             break;
-
-        for(int i=0;i<20;i++)
+        print_running_status(cmd_Run);
+        if(main_ctr > 5)
         {
-            if(TICC_devices[i].configured)
+            for(int i=0;i<=(zigbee+btle);i++)
             {
-                print_status(i+2,(int)TICC_devices[i].dev_type,TICC_devices[i].channel,TICC_devices[i].pkt_ctr);
+                if(TICC_devices[i].channel > 0)
+                {
+                    print_status(i+2,(int)TICC_devices[i].dev_type,TICC_devices[i].channel,TICC_devices[i].pkt_ctr);
+                }
             }
+            main_ctr = 0;
         }
+        main_ctr++;
+        sleep(1);
     }
     if(debug_output)
         printf("close all of the libusb\n");
@@ -387,8 +406,10 @@ int main(int argc, char *argv[])
     {
         if(TICC_devices[i].channel > 0)
         {
+            pthread_mutex_lock(&StructMutex);
             libusb_release_interface(TICC_devices[i].dev,i);
             libusb_close(TICC_devices[i].dev);
+            pthread_mutex_unlock(&StructMutex);
         }
     }
 

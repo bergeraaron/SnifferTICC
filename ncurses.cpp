@@ -71,10 +71,10 @@ void print_status(int y,int type,int chan,int pkt_cnt)
 	wmove(my_win,y,1);
 	waddstr(my_win,t_type);
 
-	char t_chan[10];memset(t_chan,0x00,10);
+    char t_chan[10];memset(t_chan,0x00,10);
     snprintf(t_chan,10,"%d",chan);
     wmove(my_win,y,15);
-	waddstr(my_win,t_chan);
+    waddstr(my_win,t_chan);
 
     char t_pkt[10];memset(t_pkt,0x00,10);
     snprintf(t_pkt,10,"%d",pkt_cnt);
@@ -82,3 +82,18 @@ void print_status(int y,int type,int chan,int pkt_cnt)
     waddstr(my_win,t_pkt);
     wrefresh(my_win);
 }
+
+void print_running_status(bool running)
+{
+
+    int x = 1;
+    int y = LINES - 2;
+
+    wmove(my_win,y,x);
+    if(running)
+        waddstr(my_win,"running");
+    else
+        waddstr(my_win,"shutting down");
+    wrefresh(my_win);
+}
+

@@ -22,6 +22,8 @@ int thread_number[MaxThreads];
 //mutexes one for the zigbee file and one for the btle file
 pthread_mutex_t ZigbeeMutex;
 pthread_mutex_t BtleMutex;
+pthread_mutex_t StructMutex;
+pthread_mutex_t UsbMutex;
 
 char u_file_name[64];
 bool debug_output = false;

@@ -9,3 +9,5 @@ void n_draw_border();
 void print_ncurses(int line_num,char * txt);
 void print_headers();
 void print_status(int y,int type,int chan,int pkt_cnt);
+void print_running_status(bool running);
+
