@@ -10,6 +10,7 @@
 //#include <libusb-1.0/libusb.h>
 #include <pcap.h>
 #include "usb.h"
+#include "ncurses.h"
 
 //thread stuff
 #define MaxThreads 20
@@ -23,7 +24,7 @@ pthread_mutex_t ZigbeeMutex;
 pthread_mutex_t BtleMutex;
 
 char u_file_name[64];
-bool debug_output = true;
+bool debug_output = false;
 
 bool cmd_Run = true;
 bool main_shutdown = false;
@@ -39,9 +40,9 @@ int parse_cmd_line(int argc, char *argv[]);
 void setup_zigbee_pcap();
 void write_zigbee_pcap(unsigned char * data, int xfer);
 void close_zigbee_pcap();
-void zigbee_read(libusb_device_handle *dev, int channel);
+void zigbee_read(int tctr, libusb_device_handle *dev, int channel);
 void setup_btle_pcap();
-void btle_read(libusb_device_handle *dev, int channel);
+void btle_read(int tctr, libusb_device_handle *dev, int channel);
 void write_btle_pcap(unsigned char * data, int xfer);
 void close_btle_pcap();
 int find_devices();

@@ -59,9 +59,9 @@ void* command_thread(void * arg)
             if(debug_output)
                 printf("read\n");
             if(TICC_devices[*tctr].dev_type == CC2531)
-                zigbee_read(TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
+                zigbee_read(*tctr,TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
             if(TICC_devices[*tctr].dev_type == CC2540)
-                btle_read(TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
+                btle_read(*tctr,TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
         }
         else if(cmd_Run == false)
         {
@@ -118,7 +118,7 @@ void close_zigbee_pcap()
     pcap_dump_close(z_d);
 }
 
-void zigbee_read(libusb_device_handle *dev, int channel)
+void zigbee_read(int tctr, libusb_device_handle *dev, int channel)
 {
     u_char data[1024];
     while (1)
@@ -134,6 +134,8 @@ void zigbee_read(libusb_device_handle *dev, int channel)
                     printf(" %02X", data[i]);
                 printf("\n");
             }
+
+            TICC_devices[tctr].pkt_ctr++;
 
             write_zigbee_pcap(data, xfer);	
 
@@ -190,7 +192,7 @@ void close_btle_pcap()
     pcap_dump_close(bt_d);
 }
 
-void btle_read(libusb_device_handle *dev, int channel)
+void btle_read(int tctr, libusb_device_handle *dev, int channel)
 {
     u_char data[1024];
     while (1)
@@ -207,6 +209,8 @@ void btle_read(libusb_device_handle *dev, int channel)
                 printf("\n");
             }
 
+            TICC_devices[tctr].pkt_ctr++;
+
             write_btle_pcap(data, xfer);
 
             if(cmd_Run == false)
@@ -218,7 +222,8 @@ void btle_read(libusb_device_handle *dev, int channel)
 int parse_cmd_line(int argc, char *argv[])
 {
     memset(u_file_name,0x00,64);
-    if(argc <= 1)
+    //if(argc <= 1)
+    if(false)
     {
         printf("Usage:\n ./sniffer <options>\n");
         printf("\t-----OPTIONS-----\n");
@@ -302,16 +307,24 @@ int main(int argc, char *argv[])
     parse_cmd_line(argc, argv);
     SetupSigHandler();
 
+    init_ncurses();
+
     usb_lib_init();
 
     int zigbee = 0;
     int btle = 0;
 
     find_num_devices(zigbee,btle);
-    printf("num zigbee:%d btle:%d\n",zigbee,btle);
+    if(debug_output)
+        printf("num zigbee:%d btle:%d\n",zigbee,btle);
 
     if(zigbee == 0 && btle == 0)
     {
+        for(int i=0;i<10;i++)
+            print_status(i+2,1,11,i);
+
+        getch();			/* Wait for user input */
+        end_ncurses();
         printf("No supported devices found\n");
         return 0;
     }
@@ -332,15 +345,13 @@ int main(int argc, char *argv[])
         if(main_shutdown)//this should wait to be sure the pcap closed
             break;
 
-        //print packet counts
         for(int i=0;i<20;i++)
         {
             if(TICC_devices[i].configured)
             {
-                printf("Channel:%d PktCnt:%d\n",TICC_devices[i].channel,TICC_devices[i].pkt_ctr);
+                print_status(i+2,(int)TICC_devices[i].dev_type,TICC_devices[i].channel,TICC_devices[i].pkt_ctr);
             }
         }
-        printf("\n\n");
     }
     if(debug_output)
         printf("close all of the libusb\n");
@@ -356,6 +367,8 @@ int main(int argc, char *argv[])
     //close files if open
     close_zigbee_pcap();
     close_btle_pcap();
+
+    end_ncurses();
 
     //double free?
     //printf("libusb_exit\n");

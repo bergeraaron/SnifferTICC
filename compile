@@ -1,4 +1,5 @@
 rm *.o
 g++ -c usb.cpp -o usb.o
 g++ -c sniffer.cpp -o sniffer.o
-g++ usb.o sniffer.o -o sniffer -lusb-1.0 -lpcap -lpthread
+g++ -c ncurses.cpp -o ncurses.o
+g++ usb.o sniffer.o ncurses.o -o sniffer -lusb-1.0 -lpcap -lpthread -lncurses

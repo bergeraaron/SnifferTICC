@@ -220,22 +220,25 @@ int find_num_devices(int& zigbee,int& btle)
 
         if(desc.idVendor == 0x0451 && desc.idProduct == 0x16ae && m_zigbee)
         {
+            if(debug_output)
             printf("found CC2531 %d\n",(int)idx);
             zigbee++;
         }
         else if(desc.idVendor == 0x11a0 && desc.idProduct == 0xeb20)
         {
             //probably won't have any of these
+            if(debug_output)
             printf("found CC2530 %d\n",(int)idx);
         }
         else if(desc.idVendor == 0x0451 && desc.idProduct == 0x16b3 && m_bt)
         {
+            if(debug_output)
             printf("found CC2540 %d\n",(int)idx);
             btle++;
         }
     }
     libusb_free_device_list(list, count);
-
+    if(debug_output)
     printf("zigbee:%d btle:%d\n",zigbee,btle);
 }
 
@@ -269,6 +272,7 @@ int find_devices()
 
         if(desc.idVendor == 0x0451 && desc.idProduct == 0x16ae && m_zigbee)
         {
+            if(debug_output)
             printf("found CC2531 %d\n",(int)idx);
             //libusb_device_handle *dev;
             libusb_open(device,&TICC_devices[TICC_device_ctr].dev);
@@ -282,11 +286,13 @@ int find_devices()
         else if(desc.idVendor == 0x11a0 && desc.idProduct == 0xeb20)
         {
             //probably won't have any of these
+            if(debug_output)
             printf("found CC2530 %d\n",(int)idx);
             //break;
         }
         else if(desc.idVendor == 0x0451 && desc.idProduct == 0x16b3 && m_bt)
         {
+            if(debug_output)
             printf("found CC2540 %d\n",(int)idx);
             //libusb_device_handle *dev;
             libusb_open(device,&TICC_devices[TICC_device_ctr].dev);
