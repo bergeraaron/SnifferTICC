@@ -37,7 +37,7 @@ void n_draw_border()
 	wborder(my_win, '|', '|', '-', '-', '+', '+', '+', '+');
 	wrefresh(my_win);
 	print_headers();
-    wrefresh(my_win);
+        wrefresh(my_win);
 }
 
 void print_ncurses(int line_num,char * txt)
@@ -55,8 +55,8 @@ void print_headers()
 	waddstr(my_win,"Device");
 	wmove(my_win,1,15);
 	waddstr(my_win,"Chan");
-    wmove(my_win,1,25);
-    waddstr(my_win,"Pkts");
+        wmove(my_win,1,25);
+        waddstr(my_win,"Pkts");
 }
 
 void print_status(int y,int type,int chan,int pkt_cnt)

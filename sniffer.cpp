@@ -16,10 +16,12 @@ pcap_t *bt_pcap;
 pcap_dumper_t *bt_d;
 
 //functions
-void setup_threads()
+void setup_threads(int num_threads)
 {
+    if(num_threads > MaxThreads)
+        num_threads = MaxThreads;
     // Setup threads
-    for(int i=0;i<MaxThreads;i++)
+    for(int i=0;i<num_threads;i++)
     {
         thread_number[i] = i;
         thread_running[i] = 0;//thread not being used
@@ -65,8 +67,10 @@ void* command_thread(void * arg)
         }
         else if(cmd_Run == false)
         {
+            if(debug_output)
             printf("shut down thread :%d\n",*tctr);
             main_shutdown = true;
+            break;
         }
     }
     if(debug_output)
@@ -115,7 +119,11 @@ void close_zigbee_pcap()
 {
     if(debug_output)
         printf("close the pcap\n");
-    pcap_dump_close(z_d);
+
+    if(z_pcap != NULL)
+        pcap_close(z_pcap);
+    if(z_d != NULL)
+        pcap_dump_close(z_d);
 }
 
 void zigbee_read(int tctr, libusb_device_handle *dev, int channel)
@@ -189,7 +197,10 @@ void close_btle_pcap()
 {
     if(debug_output)
         printf("close the pcap\n");
-    pcap_dump_close(bt_d);
+    if(bt_pcap != NULL)
+        pcap_close(bt_pcap);
+    if(bt_d != NULL)
+        pcap_dump_close(bt_d);
 }
 
 void btle_read(int tctr, libusb_device_handle *dev, int channel)
@@ -280,11 +291,27 @@ void SigHandler(int sig)
         if(cmd_Run)
         {
             cmd_Run = false;
-            printf("\nShutdown received.");
+            if(debug_output)
+                printf("\nShutdown received.");
         }
         else
         { // we already sent the shutdown signal
-            printf("Emergency shutdown.");
+           printf("Emergency shutdown.");
+           //still try to shut stuff down
+           for(int i=0;i<MaxThreads;i++)
+           {
+               if(TICC_devices[i].channel > 0)
+               {
+                    libusb_release_interface(TICC_devices[i].dev,i);
+                    libusb_close(TICC_devices[i].dev);
+               }
+           }
+
+           //close files if open
+           close_zigbee_pcap();
+           close_btle_pcap();
+
+           end_ncurses();
            exit(1);
         }
         break;
@@ -328,20 +355,21 @@ int main(int argc, char *argv[])
         printf("No supported devices found\n");
         return 0;
     }
-
-    setup_zigbee_pcap();
-    setup_btle_pcap();
+    if(zigbee > 0)
+        setup_zigbee_pcap();
+    if(btle > 0)
+        setup_btle_pcap();
 
     setup_struct();
 
     // Setup threads
-    setup_threads();
+    setup_threads((zigbee+btle));
 
     find_devices();
 
     while(true)
     {
-        sleep(10);
+        sleep(30);
         if(main_shutdown)//this should wait to be sure the pcap closed
             break;
 
@@ -365,8 +393,10 @@ int main(int argc, char *argv[])
     }
 
     //close files if open
-    close_zigbee_pcap();
-    close_btle_pcap();
+    if(zigbee > 0)
+        close_zigbee_pcap();
+    if(btle > 0)
+        close_btle_pcap();
 
     end_ncurses();
 

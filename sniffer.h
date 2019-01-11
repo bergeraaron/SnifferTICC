@@ -30,7 +30,7 @@ bool cmd_Run = true;
 bool main_shutdown = false;
 
 //function definitions
-void setup_threads();
+void setup_threads(int num_threads);
 void* command_thread(void * arg);
 int get_ident(libusb_device_handle *dev);
 int set_power(libusb_device_handle *dev, uint8_t power, int retries);
