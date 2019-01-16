@@ -3,6 +3,8 @@
 WINDOW *my_win;
 int startx, starty, width, height;
 
+bool color_supported = true;
+
 WINDOW *create_newwin(int height, int width, int starty, int startx)
 {	WINDOW *local_win;
 
@@ -18,6 +20,17 @@ WINDOW *create_newwin(int height, int width, int starty, int startx)
 void init_ncurses()
 {
 	initscr();                      /* Start curses mode              */
+        if(has_colors() == FALSE)
+        {
+            color_supported = false;
+        }
+        else
+        {
+            color_supported = true;
+            start_color();
+            init_pair(1, COLOR_RED, COLOR_BLACK);//zigbee colors
+            init_pair(2, COLOR_BLUE, COLOR_BLACK);//bt colors
+        }
 	height = LINES;
 	width = COLS;
 	starty = (LINES - height) / 2;	/* Calculating for a center placement */
@@ -70,6 +83,19 @@ void print_status(int y,int type,int chan,int pkt_cnt,int error_cnt)
         snprintf(t_type,14,"CC2540");
     else
         snprintf(t_type,14," ");
+
+    if(color_supported && type == 1)
+    {
+        init_pair(1, COLOR_RED, COLOR_BLACK);//zigbee colors
+        attron(COLOR_PAIR(1));
+    }
+    else if(color_supported && type == 2)
+    {
+        init_pair(2, COLOR_BLUE, COLOR_BLACK);//bt colors
+        attron(COLOR_PAIR(2));
+    }
+
+
 	wmove(my_win,y,1);
 	waddstr(my_win,t_type);
 
@@ -87,8 +113,15 @@ void print_status(int y,int type,int chan,int pkt_cnt,int error_cnt)
     snprintf(t_epkt,10,"%d",error_cnt);
     wmove(my_win,y,35);
     waddstr(my_win,t_epkt);
-
     wrefresh(my_win);
+    if(color_supported && type == 1)
+    {
+        attroff(COLOR_PAIR(1));
+    }
+    else if(color_supported && type == 2)
+    {
+        attroff(COLOR_PAIR(2));
+    }
 }
 
 void print_running_status(bool running)

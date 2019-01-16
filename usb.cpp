@@ -35,6 +35,7 @@ void setup_struct()
         TICC_devices[i].pkt_ctr=0;
         TICC_devices[i].error_ctr=0;
         TICC_devices[i].timeout_ctr=0;
+        TICC_devices[i].last_pkt_timestamp=0;
     }
 }
 
@@ -252,6 +253,9 @@ int find_devices()
     CC2540 idVendor=0x0451, idProduct=0x16b3
     /**/
 
+    int zb_ctr = 0;
+    int bt_ctr = 0;
+
     libusb_device **list = NULL;
 
     libusb_device *device;
@@ -281,10 +285,11 @@ int find_devices()
             assert(TICC_devices[TICC_device_ctr].dev != NULL);
             //set type 
             TICC_devices[TICC_device_ctr].dev_type = CC2531;
-            TICC_devices[TICC_device_ctr].channel = zigbee_channels[TICC_device_ctr];
+            TICC_devices[TICC_device_ctr].channel = zigbee_channels[zb_ctr];
             init(TICC_devices[TICC_device_ctr].dev,TICC_devices[TICC_device_ctr].channel);
             TICC_devices[TICC_device_ctr].configured = true;
             TICC_device_ctr++;
+            zb_ctr++;
             //break;
         }
         else if(desc.idVendor == 0x11a0 && desc.idProduct == 0xeb20)
@@ -303,10 +308,11 @@ int find_devices()
             assert(TICC_devices[TICC_device_ctr].dev != NULL);
             //set type 
             TICC_devices[TICC_device_ctr].dev_type = CC2540;
-            TICC_devices[TICC_device_ctr].channel = btle_channels[TICC_device_ctr];
+            TICC_devices[TICC_device_ctr].channel = btle_channels[bt_ctr];
             init(TICC_devices[TICC_device_ctr].dev,TICC_devices[TICC_device_ctr].channel);
             TICC_devices[TICC_device_ctr].configured = true;
             TICC_device_ctr++;
+            bt_ctr++;
             //break;
         }
     }

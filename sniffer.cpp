@@ -142,9 +142,11 @@ void zigbee_read(int tctr, libusb_device_handle *dev, int channel)
         int ret = libusb_bulk_transfer(dev, DATA_EP_CC2531, data, sizeof(data), &xfer, TIMEOUT);
 //        if(debug_output){printf("pthread_mutex_unlock usb\n");}
 //        pthread_mutex_unlock(&UsbMutex);
-        printf("zb ret:%d xfer:%d\n",ret,xfer);
+        if(debug_output)
+        printf("zb chan:%d ret:%d xfer:%d\n",channel,ret,xfer);
         if (ret == 0)
         {
+            //the devices look to report a 4 byte counter/heartbeat, should use this for debugging
             if(xfer > 7)
             {
             if(debug_output)
@@ -166,9 +168,15 @@ void zigbee_read(int tctr, libusb_device_handle *dev, int channel)
             if(cmd_Run == false)
                 break;
             }
+            TICC_devices[tctr].timeout_ctr=0;
+            TICC_devices[tctr].last_pkt_timestamp = time(0);
         }
         else
         {
+            int diff = time(0) - TICC_devices[tctr].last_pkt_timestamp;
+if(diff > 10)
+{
+            printf("diff:%d\n",diff);
             if(ret == LIBUSB_ERROR_IO && debug_output)
                 printf("zb LIBUSB_ERROR_IO\n");
             else if(ret == LIBUSB_ERROR_INVALID_PARAM && debug_output)
@@ -202,26 +210,28 @@ void zigbee_read(int tctr, libusb_device_handle *dev, int channel)
             {
                 if(debug_output){printf("pthread_mutex_lock usb\n");}
                 pthread_mutex_lock(&UsbMutex);
-                //init(dev,channel);
-                libusb_reset_device(dev);
+                init(dev,channel);
+                //libusb_reset_device(dev);
                 if(debug_output){printf("pthread_mutex_unlock usb\n");}
                 pthread_mutex_unlock(&UsbMutex);
                 TICC_devices[tctr].error_ctr++;
             }
             else
             {
+                //TICC_devices[tctr].error_ctr++;
                 TICC_devices[tctr].timeout_ctr++;
                 if(TICC_devices[tctr].timeout_ctr > 30)
                 {
                     if(debug_output){printf("pthread_mutex_lock usb\n");}
                     pthread_mutex_lock(&UsbMutex);
-                    //init(dev,channel);
-                    libusb_reset_device(dev);
+                    init(dev,channel);
+                    //libusb_reset_device(dev);
                     if(debug_output){printf("pthread_mutex_unlock usb\n");}
                     pthread_mutex_unlock(&UsbMutex);
                     TICC_devices[tctr].timeout_ctr=0;
                 }
             }
+}//end of diff
         }
     }
 }
@@ -289,6 +299,7 @@ void btle_read(int tctr, libusb_device_handle *dev, int channel)
         int ret = libusb_bulk_transfer(dev, DATA_EP_CC2540, data, sizeof(data), &xfer, TIMEOUT);
 //        if(debug_output){printf("pthread_mutex_unlock usb\n");}
 //        pthread_mutex_unlock(&UsbMutex);
+        if(debug_output)
         printf("bt ret:%d xfer:%d\n",ret,xfer);
         if (ret == 0)
         {
@@ -313,10 +324,14 @@ void btle_read(int tctr, libusb_device_handle *dev, int channel)
             if(cmd_Run == false)
                 break;
             }
+            TICC_devices[tctr].timeout_ctr=0;
+            TICC_devices[tctr].last_pkt_timestamp = time(0);
         }
         else
         {
-
+            int diff = time(0) - TICC_devices[tctr].last_pkt_timestamp;
+if(diff > 10)
+{
             if(ret == LIBUSB_ERROR_IO && debug_output)
                 printf("bt LIBUSB_ERROR_IO\n");
             else if(ret == LIBUSB_ERROR_INVALID_PARAM && debug_output)
@@ -358,6 +373,7 @@ void btle_read(int tctr, libusb_device_handle *dev, int channel)
             }
             else
             {
+                //TICC_devices[tctr].error_ctr++;
                 TICC_devices[tctr].timeout_ctr++;
                 if(TICC_devices[tctr].timeout_ctr > 30)
                 {
@@ -370,7 +386,7 @@ void btle_read(int tctr, libusb_device_handle *dev, int channel)
                     TICC_devices[tctr].timeout_ctr=0;
                 }
             }
-
+}//end diff
         }
     }
 }
@@ -408,6 +424,12 @@ int parse_cmd_line(int argc, char *argv[])
             else if(strcmp(argv[we],"-d") == 0)
             {
                 debug_output = true;
+                ncurses_display = false;
+            }
+            else if(strcmp(argv[we],"-n") == 0)
+            {
+                debug_output = false;
+                ncurses_display = true;
             }
             else if(strcmp(argv[we],"-i") == 0)//ignore something
             {

@@ -32,6 +32,8 @@ struct TICC_device
     unsigned int pkt_ctr;
     unsigned int error_ctr;
     unsigned int timeout_ctr;
+    unsigned int last_pkt_timestamp;
+    bool active;
 };
 
 void setup_struct();
