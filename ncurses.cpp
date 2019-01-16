@@ -57,9 +57,11 @@ void print_headers()
 	waddstr(my_win,"Chan");
         wmove(my_win,1,25);
         waddstr(my_win,"Pkts");
+        wmove(my_win,1,35);
+        waddstr(my_win,"Errors");
 }
 
-void print_status(int y,int type,int chan,int pkt_cnt)
+void print_status(int y,int type,int chan,int pkt_cnt,int error_cnt)
 {
     char t_type[14];memset(t_type,0x00,14);
     if(type == 1)//CC2531
@@ -80,6 +82,12 @@ void print_status(int y,int type,int chan,int pkt_cnt)
     snprintf(t_pkt,10,"%d",pkt_cnt);
     wmove(my_win,y,25);
     waddstr(my_win,t_pkt);
+
+    char t_epkt[10];memset(t_epkt,0x00,10);
+    snprintf(t_epkt,10,"%d",error_cnt);
+    wmove(my_win,y,35);
+    waddstr(my_win,t_epkt);
+
     wrefresh(my_win);
 }
 

@@ -30,6 +30,8 @@ struct TICC_device
     unsigned char dev_type;
     bool configured;
     unsigned int pkt_ctr;
+    unsigned int error_ctr;
+    unsigned int timeout_ctr;
 };
 
 void setup_struct();

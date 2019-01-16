@@ -26,7 +26,9 @@ pthread_mutex_t StructMutex;
 pthread_mutex_t UsbMutex;
 
 char u_file_name[64];
-bool debug_output = false;
+bool debug_output = true;
+bool ncurses_display = false;
+bool save_files = false;
 
 bool cmd_Run = true;
 bool main_shutdown = false;

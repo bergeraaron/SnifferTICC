@@ -33,6 +33,8 @@ void setup_struct()
         TICC_devices[i].dev_type=0;
         TICC_devices[i].channel=0;
         TICC_devices[i].pkt_ctr=0;
+        TICC_devices[i].error_ctr=0;
+        TICC_devices[i].timeout_ctr=0;
     }
 }
 
@@ -280,6 +282,8 @@ int find_devices()
             //set type 
             TICC_devices[TICC_device_ctr].dev_type = CC2531;
             TICC_devices[TICC_device_ctr].channel = zigbee_channels[TICC_device_ctr];
+            init(TICC_devices[TICC_device_ctr].dev,TICC_devices[TICC_device_ctr].channel);
+            TICC_devices[TICC_device_ctr].configured = true;
             TICC_device_ctr++;
             //break;
         }
@@ -300,6 +304,8 @@ int find_devices()
             //set type 
             TICC_devices[TICC_device_ctr].dev_type = CC2540;
             TICC_devices[TICC_device_ctr].channel = btle_channels[TICC_device_ctr];
+            init(TICC_devices[TICC_device_ctr].dev,TICC_devices[TICC_device_ctr].channel);
+            TICC_devices[TICC_device_ctr].configured = true;
             TICC_device_ctr++;
             //break;
         }
