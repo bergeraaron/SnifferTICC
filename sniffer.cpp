@@ -149,24 +149,24 @@ void zigbee_read(int tctr, libusb_device_handle *dev, int channel)
             //the devices look to report a 4 byte counter/heartbeat, should use this for debugging
             if(xfer > 7)
             {
-            if(debug_output)
-            {
-                printf("channel:%d ret:%d xfer:%d\n",channel,ret,xfer);
-                for (int i = 0; i < xfer; i++)
-                    printf(" %02X", data[i]);
-                printf("\n");
-            }
-            if(debug_output){printf("pthread_mutex_lock struct\n");}
-            pthread_mutex_lock(&StructMutex);
-            TICC_devices[tctr].pkt_ctr++;
-            if(debug_output){printf("pthread_mutex_unlock struct\n");}
-            pthread_mutex_unlock(&StructMutex);
+                if(debug_output)
+                {
+                    printf("channel:%d ret:%d xfer:%d\n",channel,ret,xfer);
+                    for (int i = 0; i < xfer; i++)
+                        printf(" %02X", data[i]);
+                    printf("\n");
+                }
+                if(debug_output){printf("pthread_mutex_lock struct\n");}
+                pthread_mutex_lock(&StructMutex);
+                TICC_devices[tctr].pkt_ctr++;
+                if(debug_output){printf("pthread_mutex_unlock struct\n");}
+                pthread_mutex_unlock(&StructMutex);
 
-            if(save_files)
-                write_zigbee_pcap(data, xfer);	
+                if(save_files)
+                    write_zigbee_pcap(data, xfer);	
 
-            if(cmd_Run == false)
-                break;
+                if(cmd_Run == false)
+                    break;
             }
             TICC_devices[tctr].timeout_ctr=0;
             TICC_devices[tctr].last_pkt_timestamp = time(0);
@@ -174,53 +174,39 @@ void zigbee_read(int tctr, libusb_device_handle *dev, int channel)
         else
         {
             int diff = time(0) - TICC_devices[tctr].last_pkt_timestamp;
-if(diff > 10)
-{
-            printf("diff:%d\n",diff);
-            if(ret == LIBUSB_ERROR_IO && debug_output)
-                printf("zb LIBUSB_ERROR_IO\n");
-            else if(ret == LIBUSB_ERROR_INVALID_PARAM && debug_output)
-                printf("zb LIBUSB_ERROR_INVALID_PARAM\n");
-            else if(ret == LIBUSB_ERROR_ACCESS && debug_output)
-                printf("zb LIBUSB_ERROR_ACCESS\n");
-            else if(ret == LIBUSB_ERROR_NO_DEVICE && debug_output)
-                printf("zb LIBUSB_ERROR_NO_DEVICE\n");
-            else if(ret == LIBUSB_ERROR_NOT_FOUND && debug_output)
-                printf("zb LIBUSB_ERROR_NOT_FOUND\n");
-            else if(ret == LIBUSB_ERROR_BUSY && debug_output)
-                printf("zb LIBUSB_ERROR_BUSY\n");
-            else if(ret == LIBUSB_ERROR_TIMEOUT && debug_output)
-                printf("zb LIBUSB_ERROR_TIMEOUT ctr:%d\n",TICC_devices[tctr].timeout_ctr);
-            else if(ret == LIBUSB_ERROR_OVERFLOW && debug_output)
-                printf("zb LIBUSB_ERROR_OVERFLOW\n");
-            else if(ret == LIBUSB_ERROR_PIPE && debug_output)
-                printf("zb LIBUSB_ERROR_PIPE\n");
-            else if(ret == LIBUSB_ERROR_INTERRUPTED && debug_output)
-                printf("zb LIBUSB_ERROR_INTERRUPTED\n");
-            else if(ret == LIBUSB_ERROR_NO_MEM && debug_output)
-                printf("zb LIBUSB_ERROR_NO_MEM\n");
-            else if(ret == LIBUSB_ERROR_NOT_SUPPORTED && debug_output)
-                printf("zb LIBUSB_ERROR_NOT_SUPPORTED\n");
-            else
+            if(diff > 10)
             {
-                if(debug_output)
-                    printf("zb LIBUSB_ERROR:%d\n",ret);
-            }
-            if(ret != LIBUSB_ERROR_TIMEOUT)
-            {
-                if(debug_output){printf("pthread_mutex_lock usb\n");}
-                pthread_mutex_lock(&UsbMutex);
-                init(dev,channel);
-                //libusb_reset_device(dev);
-                if(debug_output){printf("pthread_mutex_unlock usb\n");}
-                pthread_mutex_unlock(&UsbMutex);
-                TICC_devices[tctr].error_ctr++;
-            }
-            else
-            {
-                //TICC_devices[tctr].error_ctr++;
-                TICC_devices[tctr].timeout_ctr++;
-                if(TICC_devices[tctr].timeout_ctr > 30)
+                printf("diff:%d\n",diff);
+                if(ret == LIBUSB_ERROR_IO && debug_output)
+                    printf("zb LIBUSB_ERROR_IO\n");
+                else if(ret == LIBUSB_ERROR_INVALID_PARAM && debug_output)
+                    printf("zb LIBUSB_ERROR_INVALID_PARAM\n");
+                else if(ret == LIBUSB_ERROR_ACCESS && debug_output)
+                    printf("zb LIBUSB_ERROR_ACCESS\n");
+                else if(ret == LIBUSB_ERROR_NO_DEVICE && debug_output)
+                    printf("zb LIBUSB_ERROR_NO_DEVICE\n");
+                else if(ret == LIBUSB_ERROR_NOT_FOUND && debug_output)
+                    printf("zb LIBUSB_ERROR_NOT_FOUND\n");
+                else if(ret == LIBUSB_ERROR_BUSY && debug_output)
+                    printf("zb LIBUSB_ERROR_BUSY\n");
+                else if(ret == LIBUSB_ERROR_TIMEOUT && debug_output)
+                    printf("zb LIBUSB_ERROR_TIMEOUT ctr:%d\n",TICC_devices[tctr].timeout_ctr);
+                else if(ret == LIBUSB_ERROR_OVERFLOW && debug_output)
+                    printf("zb LIBUSB_ERROR_OVERFLOW\n");
+                else if(ret == LIBUSB_ERROR_PIPE && debug_output)
+                    printf("zb LIBUSB_ERROR_PIPE\n");
+                else if(ret == LIBUSB_ERROR_INTERRUPTED && debug_output)
+                    printf("zb LIBUSB_ERROR_INTERRUPTED\n");
+                else if(ret == LIBUSB_ERROR_NO_MEM && debug_output)
+                    printf("zb LIBUSB_ERROR_NO_MEM\n");
+                else if(ret == LIBUSB_ERROR_NOT_SUPPORTED && debug_output)
+                    printf("zb LIBUSB_ERROR_NOT_SUPPORTED\n");
+                else
+                {
+                    if(debug_output)
+                        printf("zb LIBUSB_ERROR:%d\n",ret);
+                }
+                if(ret != LIBUSB_ERROR_TIMEOUT)
                 {
                     if(debug_output){printf("pthread_mutex_lock usb\n");}
                     pthread_mutex_lock(&UsbMutex);
@@ -228,10 +214,24 @@ if(diff > 10)
                     //libusb_reset_device(dev);
                     if(debug_output){printf("pthread_mutex_unlock usb\n");}
                     pthread_mutex_unlock(&UsbMutex);
-                    TICC_devices[tctr].timeout_ctr=0;
+                    TICC_devices[tctr].error_ctr++;
                 }
-            }
-}//end of diff
+                else
+                {
+                    //TICC_devices[tctr].error_ctr++;
+                    TICC_devices[tctr].timeout_ctr++;
+                    if(TICC_devices[tctr].timeout_ctr > 30)
+                    {
+                        if(debug_output){printf("pthread_mutex_lock usb\n");}
+                        pthread_mutex_lock(&UsbMutex);
+                        init(dev,channel);
+                        //libusb_reset_device(dev);
+                        if(debug_output){printf("pthread_mutex_unlock usb\n");}
+                        pthread_mutex_unlock(&UsbMutex);
+                        TICC_devices[tctr].timeout_ctr=0;
+                    }
+                }
+            }//end of diff
         }
     }
 }
@@ -305,24 +305,24 @@ void btle_read(int tctr, libusb_device_handle *dev, int channel)
         {
             if(xfer > 7)
             {
-            if(debug_output)
-            {
-                printf("channel:%d ret:%d xfer:%d\n",channel,ret,xfer);
-                for (int i = 0; i < xfer; i++)
-                    printf(" %02X", data[i]);
-                printf("\n");
-            }
-            if(debug_output){printf("pthread_mutex_lock struct\n");}
-            pthread_mutex_lock(&StructMutex);
-            TICC_devices[tctr].pkt_ctr++;
-            if(debug_output){printf("pthread_mutex_unlock struct\n");}
-            pthread_mutex_unlock(&StructMutex);
+                if(debug_output)
+                {
+                    printf("channel:%d ret:%d xfer:%d\n",channel,ret,xfer);
+                    for (int i = 0; i < xfer; i++)
+                        printf(" %02X", data[i]);
+                    printf("\n");
+                }
+                if(debug_output){printf("pthread_mutex_lock struct\n");}
+                pthread_mutex_lock(&StructMutex);
+                TICC_devices[tctr].pkt_ctr++;
+                if(debug_output){printf("pthread_mutex_unlock struct\n");}
+                pthread_mutex_unlock(&StructMutex);
 
-            if(save_files)
-                write_btle_pcap(data, xfer);
+                if(save_files)
+                    write_btle_pcap(data, xfer);
 
-            if(cmd_Run == false)
-                break;
+                if(cmd_Run == false)
+                    break;
             }
             TICC_devices[tctr].timeout_ctr=0;
             TICC_devices[tctr].last_pkt_timestamp = time(0);
@@ -330,52 +330,38 @@ void btle_read(int tctr, libusb_device_handle *dev, int channel)
         else
         {
             int diff = time(0) - TICC_devices[tctr].last_pkt_timestamp;
-if(diff > 10)
-{
-            if(ret == LIBUSB_ERROR_IO && debug_output)
-                printf("bt LIBUSB_ERROR_IO\n");
-            else if(ret == LIBUSB_ERROR_INVALID_PARAM && debug_output)
-                printf("bt LIBUSB_ERROR_INVALID_PARAM\n");
-            else if(ret == LIBUSB_ERROR_ACCESS && debug_output)
-                printf("bt LIBUSB_ERROR_ACCESS\n");
-            else if(ret == LIBUSB_ERROR_NO_DEVICE && debug_output)
-                printf("bt LIBUSB_ERROR_NO_DEVICE\n");
-            else if(ret == LIBUSB_ERROR_NOT_FOUND && debug_output)
-                printf("bt LIBUSB_ERROR_NOT_FOUND\n");
-            else if(ret == LIBUSB_ERROR_BUSY && debug_output)
-                printf("bt LIBUSB_ERROR_BUSY\n");
-            else if(ret == LIBUSB_ERROR_TIMEOUT && debug_output)
-                printf("bt LIBUSB_ERROR_TIMEOUT ctr:%d\n",TICC_devices[tctr].timeout_ctr);
-            else if(ret == LIBUSB_ERROR_OVERFLOW && debug_output)
-                printf("bt LIBUSB_ERROR_OVERFLOW\n");
-            else if(ret == LIBUSB_ERROR_PIPE && debug_output)
-                printf("bt LIBUSB_ERROR_PIPE\n");
-            else if(ret == LIBUSB_ERROR_INTERRUPTED && debug_output)
-                printf("bt LIBUSB_ERROR_INTERRUPTED\n");
-            else if(ret == LIBUSB_ERROR_NO_MEM && debug_output)
-                printf("bt LIBUSB_ERROR_NO_MEM\n");
-            else if(ret == LIBUSB_ERROR_NOT_SUPPORTED && debug_output)
-                printf("bt LIBUSB_ERROR_NOT_SUPPORTED\n");
-            else
+            if(diff > 10)
             {
-                if(debug_output)
-                    printf("bt LIBUSB_ERROR:%d\n",ret);
-            }
-            if(ret != LIBUSB_ERROR_TIMEOUT)
-            {
-                if(debug_output){printf("pthread_mutex_lock usb\n");}
-                pthread_mutex_lock(&UsbMutex);
-                //init(dev,channel);
-                libusb_reset_device(dev);
-                if(debug_output){printf("pthread_mutex_unlock usb\n");}
-                pthread_mutex_unlock(&UsbMutex);
-                TICC_devices[tctr].error_ctr++;
-            }
-            else
-            {
-                //TICC_devices[tctr].error_ctr++;
-                TICC_devices[tctr].timeout_ctr++;
-                if(TICC_devices[tctr].timeout_ctr > 30)
+                if(ret == LIBUSB_ERROR_IO && debug_output)
+                    printf("bt LIBUSB_ERROR_IO\n");
+                else if(ret == LIBUSB_ERROR_INVALID_PARAM && debug_output)
+                    printf("bt LIBUSB_ERROR_INVALID_PARAM\n");
+                else if(ret == LIBUSB_ERROR_ACCESS && debug_output)
+                    printf("bt LIBUSB_ERROR_ACCESS\n");
+                else if(ret == LIBUSB_ERROR_NO_DEVICE && debug_output)
+                    printf("bt LIBUSB_ERROR_NO_DEVICE\n");
+                else if(ret == LIBUSB_ERROR_NOT_FOUND && debug_output)
+                    printf("bt LIBUSB_ERROR_NOT_FOUND\n");
+                else if(ret == LIBUSB_ERROR_BUSY && debug_output)
+                    printf("bt LIBUSB_ERROR_BUSY\n");
+                else if(ret == LIBUSB_ERROR_TIMEOUT && debug_output)
+                    printf("bt LIBUSB_ERROR_TIMEOUT ctr:%d\n",TICC_devices[tctr].timeout_ctr);
+                else if(ret == LIBUSB_ERROR_OVERFLOW && debug_output)
+                    printf("bt LIBUSB_ERROR_OVERFLOW\n");
+                else if(ret == LIBUSB_ERROR_PIPE && debug_output)
+                    printf("bt LIBUSB_ERROR_PIPE\n");
+                else if(ret == LIBUSB_ERROR_INTERRUPTED && debug_output)
+                    printf("bt LIBUSB_ERROR_INTERRUPTED\n");
+                else if(ret == LIBUSB_ERROR_NO_MEM && debug_output)
+                    printf("bt LIBUSB_ERROR_NO_MEM\n");
+                else if(ret == LIBUSB_ERROR_NOT_SUPPORTED && debug_output)
+                    printf("bt LIBUSB_ERROR_NOT_SUPPORTED\n");
+                else
+                {
+                    if(debug_output)
+                        printf("bt LIBUSB_ERROR:%d\n",ret);
+                }
+                if(ret != LIBUSB_ERROR_TIMEOUT)
                 {
                     if(debug_output){printf("pthread_mutex_lock usb\n");}
                     pthread_mutex_lock(&UsbMutex);
@@ -383,10 +369,24 @@ if(diff > 10)
                     libusb_reset_device(dev);
                     if(debug_output){printf("pthread_mutex_unlock usb\n");}
                     pthread_mutex_unlock(&UsbMutex);
-                    TICC_devices[tctr].timeout_ctr=0;
+                    TICC_devices[tctr].error_ctr++;
                 }
-            }
-}//end diff
+                else
+                {
+                    //TICC_devices[tctr].error_ctr++;
+                    TICC_devices[tctr].timeout_ctr++;
+                    if(TICC_devices[tctr].timeout_ctr > 30)
+                    {
+                        if(debug_output){printf("pthread_mutex_lock usb\n");}
+                        pthread_mutex_lock(&UsbMutex);
+                        //init(dev,channel);
+                        libusb_reset_device(dev);
+                        if(debug_output){printf("pthread_mutex_unlock usb\n");}
+                        pthread_mutex_unlock(&UsbMutex);
+                        TICC_devices[tctr].timeout_ctr=0;
+                    }
+                }
+            }//end diff
         }
     }
 }
@@ -421,12 +421,12 @@ int parse_cmd_line(int argc, char *argv[])
                 printf("we have a output file\n");
                 snprintf(u_file_name,64,"%s",argv[we+1]);
             }
-            else if(strcmp(argv[we],"-d") == 0)
+            else if(strcmp(argv[we],"-d") == 0)//debug mode, no ncurses
             {
                 debug_output = true;
                 ncurses_display = false;
             }
-            else if(strcmp(argv[we],"-n") == 0)
+            else if(strcmp(argv[we],"-n") == 0)//ncurses mode, so no debug output
             {
                 debug_output = false;
                 ncurses_display = true;
@@ -518,12 +518,12 @@ int main(int argc, char *argv[])
 
     if(zigbee == 0 && btle == 0)
     {
-        for(int i=0;i<10;i++)
-            print_status(i+2,1,11,i,i);
+        //for(int i=0;i<10;i++)
+        //    print_status(i+2,1,11,i,i);
 
-        print_running_status(cmd_Run);
-        getch();			/* Wait for user input */
-        end_ncurses();
+        //print_running_status(cmd_Run);
+        //getch();			/* Wait for user input */
+        //end_ncurses();
         printf("No supported devices found\n");
         return 0;
     }
@@ -553,11 +553,11 @@ int main(int argc, char *argv[])
             {
                 if(TICC_devices[i].channel > 0)
                 {
-if(debug_output){printf("pthread_mutex_lock struct\n");}
-pthread_mutex_lock(&StructMutex);
+                    if(debug_output){printf("pthread_mutex_lock struct\n");}
+                    pthread_mutex_lock(&StructMutex);
                     print_status(i+2,(int)TICC_devices[i].dev_type,TICC_devices[i].channel,TICC_devices[i].pkt_ctr,TICC_devices[i].error_ctr);
-if(debug_output){printf("pthread_mutex_iunlock struct\n");}
-pthread_mutex_unlock(&StructMutex);
+                    if(debug_output){printf("pthread_mutex_iunlock struct\n");}
+                    pthread_mutex_unlock(&StructMutex);
                 }
             }
             main_ctr = 0;
