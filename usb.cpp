@@ -8,8 +8,10 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <pcap.h>
+#include <math.h>
 
 #include "usb.h"
+#include "pcap.h"
 
 //zigbee 11-26
 uint8_t zigbee_channels[16] = {11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26};
@@ -342,8 +344,8 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
 
 //        if(debug_output){printf("pthread_mutex_unlock usb\n");}
 //        pthread_mutex_unlock(&UsbMutex);
-        if(debug_output)
-        printf("chan:%d ret:%d xfer:%d\n",channel,ret,xfer);
+        //if(debug_output)
+        //printf("chan:%d ret:%d xfer:%d\n",channel,ret,xfer);
         if (ret == 0)
         {
             //the devices look to report a 4 byte counter/heartbeat, should use this for debugging
@@ -355,15 +357,23 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
                     for (int i = 0; i < xfer; i++)
                         printf(" %02X", data[i]);
                     printf("\n");
+                    if(TICC_devices[tctr].dev_type == 1)
+                        parse_2531_packet(data, xfer);
                 }
                 if(debug_output){printf("pthread_mutex_lock struct\n");}
                 pthread_mutex_lock(&StructMutex);
                 TICC_devices[tctr].pkt_ctr++;
                 if(debug_output){printf("pthread_mutex_unlock struct\n");}
                 pthread_mutex_unlock(&StructMutex);
-/**
+/**/
                 if(save_files)
-                    write_zigbee_pcap(data, xfer);	
+                {
+                    if(debug_output){printf("pthread_mutex_lock struct\n");}
+                    pthread_mutex_lock(&StructMutex);
+                    write_pcap(TICC_devices[tctr].dev_type,data,xfer);	
+                    if(debug_output){printf("pthread_mutex_unlock struct\n");}
+                    pthread_mutex_unlock(&StructMutex);
+                }
 /**/
                 if(cmd_Run == false)
                     break;
@@ -376,7 +386,7 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
             int diff = time(0) - TICC_devices[tctr].last_pkt_timestamp;
             if(diff > 10)
             {
-                printf("diff:%d\n",diff);
+                //printf("diff:%d\n",diff);
                 if(ret == LIBUSB_ERROR_IO && debug_output)
                     printf("LIBUSB_ERROR_IO\n");
                 else if(ret == LIBUSB_ERROR_INVALID_PARAM && debug_output)
@@ -434,4 +444,51 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
             }//end of diff
         }
     }
+}
+
+void parse_2531_packet(unsigned char *data, int len)
+{
+     unsigned char payload[128];memset(payload,0x00,128);
+
+     int pkt_len = data[1];
+     printf("pkt_len:%d len:%d\n",pkt_len,len);
+     if(pkt_len != (len-3))
+	printf("packet length mismatch\n");
+
+     unsigned char header[4];
+     int h_ctr=0;
+     for(int i=3;i<7;i++)
+     {
+          header[h_ctr] = data[i];h_ctr++;
+     }
+     //get the paylaod
+     int p_ctr=0;
+     for(int i=8;i<(len-2);i++)
+     {
+          payload[p_ctr] = data[i];p_ctr++;
+     }
+     int payload_len = data[7] - 0x02;
+     printf("p_ctr:%d payload_len:%d\n",p_ctr,payload_len);
+     if(p_ctr != payload_len)
+          printf("payload size mismatch\n");
+
+     unsigned char fcs1 = data[len-2];
+     unsigned char fcs2 = data[len-1];
+
+     printf("fcs1:%02X fcs2:%02X \n",fcs1,fcs2);
+
+//rssi is the signed value at fcs1
+     int rssi = (fcs1 + (int)pow(2,7)) % (int)pow(2,8) - (int)pow(2,7) - 73;
+
+     printf("rssi:%d\n",rssi);
+
+     unsigned char crc_ok = fcs2 & (1 << 7);
+
+     unsigned char corr = fcs2 & 0x7f;
+
+     printf("crc_ok:%02X corr:%02X \n",crc_ok,corr);
+
+     printf("header:%02X%02X%02X%02X\n",header[0],header[1],header[2],header[3]);
+
+
 }

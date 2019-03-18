@@ -45,3 +45,4 @@ int set_channel(libusb_device_handle *dev, uint8_t channel);
 int find_num_devices(int& zigbee,int& btle);
 int find_devices();
 int read_from_usb(int tctr, libusb_device_handle *dev, int channel);
+void parse_2531_packet(unsigned char *data, int len);

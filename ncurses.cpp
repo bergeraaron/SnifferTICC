@@ -128,13 +128,39 @@ void print_running_status(bool running)
 {
 
     int x = 1;
-    int y = LINES - 2;
+    int y = LINES - 3;
 
     wmove(my_win,y,x);
     if(running)
         waddstr(my_win,"running");
     else
         waddstr(my_win,"shutting down");
+
+    y = LINES - 2;
+    wmove(my_win,y,x);
+    waddstr(my_win,"Press Ctrl+C to exit");
+
     wrefresh(my_win);
 }
 
+void print_time()
+{
+    char real_time[64];
+    time_t rawtime;
+    struct tm * timeinfo;
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
+    snprintf(real_time,64,"%s",asctime(timeinfo));
+    int timelen = strlen(real_time);
+    real_time[timelen] = 0;
+    real_time[timelen-1] = 0;
+
+    int x = COLS;
+    int y = LINES - 2;
+    x = x - timelen;
+
+    wmove(my_win,y,x);
+    waddstr(my_win,real_time);
+
+    wrefresh(my_win);
+}

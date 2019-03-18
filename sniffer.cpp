@@ -1,19 +1,12 @@
 #include "sniffer.h"
+#include "log.h"
+#include "pcap.h"
 
 extern TICC_device TICC_devices[20];
 extern int TICC_device_ctr;
 
 extern bool m_zigbee;
 extern bool m_bt;
-
-//zigbee pcap packet info
-pcap_pkthdr z_hdr;
-pcap_t *z_pcap;
-pcap_dumper_t *z_d;
-//btle pcap packet info
-pcap_pkthdr bt_hdr;
-pcap_t *bt_pcap;
-pcap_dumper_t *bt_d;
 
 //functions
 void setup_threads(int num_threads)
@@ -64,9 +57,9 @@ void* command_thread(void * arg)
             if(debug_output)
                 printf("read\n");
             if(TICC_devices[*tctr].dev_type == CC2531)
-                zigbee_read(*tctr,TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
+                read_from_usb(*tctr,TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
             if(TICC_devices[*tctr].dev_type == CC2540)
-                btle_read(*tctr,TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
+                read_from_usb(*tctr,TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
         }
         else if(cmd_Run == false)
         {
@@ -79,316 +72,6 @@ void* command_thread(void * arg)
     if(debug_output)
     printf("exit thread\n");
     pthread_exit(NULL);
-}
-
-void setup_zigbee_pcap()
-{
-    /* open pcap context for Raw IP (DLT_RAW), see
-    * http://www.tcpdump.org/linktypes.html */
-    //https://wiki.wireshark.org/IEEE_802.15.4
-    //https://www.wireshark.org/docs/dfref/z/zbee.nwk.html
-
-    //open file
-    unsigned long int timestamp = time(0);
-    char filename[128];memset(filename,0x00,128);
-    snprintf(filename,128,"zigbee_%lu.pcap",timestamp);
-    FILE *ptr_zfile;
-    ptr_zfile=fopen(filename, "wb");
-
-    z_pcap = pcap_open_dead(195, 65565);//LINKTYPE_IEEE802_15_4_WITHFCS
-    z_d = pcap_dump_fopen(z_pcap, ptr_zfile);
-    if (z_d == NULL)
-    {
-        printf("error pcap_dump_fopen\n");
-        return;
-    }
-}
-
-void write_zigbee_pcap(unsigned char * data, int xfer)
-{
-    // prepare for writing
-    timeval tp;
-    gettimeofday(&tp, NULL);
-    z_hdr.ts.tv_sec = time(0);  // sec
-    z_hdr.ts.tv_usec = tp.tv_sec * 1000 + tp.tv_usec / 1000; // ms
-    z_hdr.caplen = z_hdr.len = xfer;
-    // write single IP packet
-    if(debug_output){printf("pthread_mutex_lock zigbee\n");}
-    pthread_mutex_lock(&ZigbeeMutex);
-    pcap_dump((u_char *)z_d, &z_hdr, data);
-    if(debug_output){printf("pthread_mutex_unlock zigbee\n");}
-    pthread_mutex_unlock(&ZigbeeMutex);
-}
-
-void close_zigbee_pcap()
-{
-    if(debug_output)
-        printf("close the pcap\n");
-
-    if(z_pcap != NULL)
-        pcap_close(z_pcap);
-    if(z_d != NULL)
-        pcap_dump_close(z_d);
-}
-
-void zigbee_read(int tctr, libusb_device_handle *dev, int channel)
-{
-    u_char data[1024];
-    while (1)
-    {
-        int xfer = 0;
-//        if(debug_output){printf("pthread_mutex_lock usb\n");}
-//        pthread_mutex_lock(&UsbMutex);
-        int ret = libusb_bulk_transfer(dev, DATA_EP_CC2531, data, sizeof(data), &xfer, TIMEOUT);
-//        if(debug_output){printf("pthread_mutex_unlock usb\n");}
-//        pthread_mutex_unlock(&UsbMutex);
-        if(debug_output)
-        printf("zb chan:%d ret:%d xfer:%d\n",channel,ret,xfer);
-        if (ret == 0)
-        {
-            //the devices look to report a 4 byte counter/heartbeat, should use this for debugging
-            if(xfer > 7)
-            {
-                if(debug_output)
-                {
-                    printf("channel:%d ret:%d xfer:%d\n",channel,ret,xfer);
-                    for (int i = 0; i < xfer; i++)
-                        printf(" %02X", data[i]);
-                    printf("\n");
-                }
-                if(debug_output){printf("pthread_mutex_lock struct\n");}
-                pthread_mutex_lock(&StructMutex);
-                TICC_devices[tctr].pkt_ctr++;
-                if(debug_output){printf("pthread_mutex_unlock struct\n");}
-                pthread_mutex_unlock(&StructMutex);
-
-                if(save_files)
-                    write_zigbee_pcap(data, xfer);	
-
-                if(cmd_Run == false)
-                    break;
-            }
-            TICC_devices[tctr].timeout_ctr=0;
-            TICC_devices[tctr].last_pkt_timestamp = time(0);
-        }
-        else
-        {
-            int diff = time(0) - TICC_devices[tctr].last_pkt_timestamp;
-            if(diff > 10)
-            {
-                printf("diff:%d\n",diff);
-                if(ret == LIBUSB_ERROR_IO && debug_output)
-                    printf("zb LIBUSB_ERROR_IO\n");
-                else if(ret == LIBUSB_ERROR_INVALID_PARAM && debug_output)
-                    printf("zb LIBUSB_ERROR_INVALID_PARAM\n");
-                else if(ret == LIBUSB_ERROR_ACCESS && debug_output)
-                    printf("zb LIBUSB_ERROR_ACCESS\n");
-                else if(ret == LIBUSB_ERROR_NO_DEVICE && debug_output)
-                    printf("zb LIBUSB_ERROR_NO_DEVICE\n");
-                else if(ret == LIBUSB_ERROR_NOT_FOUND && debug_output)
-                    printf("zb LIBUSB_ERROR_NOT_FOUND\n");
-                else if(ret == LIBUSB_ERROR_BUSY && debug_output)
-                    printf("zb LIBUSB_ERROR_BUSY\n");
-                else if(ret == LIBUSB_ERROR_TIMEOUT && debug_output)
-                    printf("zb LIBUSB_ERROR_TIMEOUT ctr:%d\n",TICC_devices[tctr].timeout_ctr);
-                else if(ret == LIBUSB_ERROR_OVERFLOW && debug_output)
-                    printf("zb LIBUSB_ERROR_OVERFLOW\n");
-                else if(ret == LIBUSB_ERROR_PIPE && debug_output)
-                    printf("zb LIBUSB_ERROR_PIPE\n");
-                else if(ret == LIBUSB_ERROR_INTERRUPTED && debug_output)
-                    printf("zb LIBUSB_ERROR_INTERRUPTED\n");
-                else if(ret == LIBUSB_ERROR_NO_MEM && debug_output)
-                    printf("zb LIBUSB_ERROR_NO_MEM\n");
-                else if(ret == LIBUSB_ERROR_NOT_SUPPORTED && debug_output)
-                    printf("zb LIBUSB_ERROR_NOT_SUPPORTED\n");
-                else
-                {
-                    if(debug_output)
-                        printf("zb LIBUSB_ERROR:%d\n",ret);
-                }
-                if(ret != LIBUSB_ERROR_TIMEOUT)
-                {
-                    if(debug_output){printf("pthread_mutex_lock usb\n");}
-                    pthread_mutex_lock(&UsbMutex);
-                    init(dev,channel);
-                    //libusb_reset_device(dev);
-                    if(debug_output){printf("pthread_mutex_unlock usb\n");}
-                    pthread_mutex_unlock(&UsbMutex);
-                    TICC_devices[tctr].error_ctr++;
-                }
-                else
-                {
-                    //TICC_devices[tctr].error_ctr++;
-                    TICC_devices[tctr].timeout_ctr++;
-                    if(TICC_devices[tctr].timeout_ctr > 30)
-                    {
-                        if(debug_output){printf("pthread_mutex_lock usb\n");}
-                        pthread_mutex_lock(&UsbMutex);
-                        init(dev,channel);
-                        //libusb_reset_device(dev);
-                        if(debug_output){printf("pthread_mutex_unlock usb\n");}
-                        pthread_mutex_unlock(&UsbMutex);
-                        TICC_devices[tctr].timeout_ctr=0;
-                    }
-                }
-            }//end of diff
-        }
-    }
-}
-
-void setup_btle_pcap()
-{
-    /* open pcap context for Raw IP (DLT_RAW), see
-    * http://www.tcpdump.org/linktypes.html */
-    //https://wiki.wireshark.org/IEEE_802.15.4
-    //https://www.wireshark.org/docs/dfref/z/zbee.nwk.html
-
-    //open file
-    unsigned long int timestamp = time(0);
-    char filename[128];memset(filename,0x00,128);
-    snprintf(filename,128,"btle_%lu.pcap",timestamp);
-    FILE *ptr_btfile;
-    ptr_btfile=fopen(filename, "wb");
-
-    //#define LINKTYPE_BLUETOOTH_LE_LL 251
-    //#define LINKTYPE_BLUETOOTH_LE_LL_WITH_PHDR 256
-
-    bt_pcap = pcap_open_dead(251, 65565);//LINKTYPE_BLUETOOTH_LE_LL
-    bt_d = pcap_dump_fopen(bt_pcap, ptr_btfile);
-    if (bt_d == NULL)
-    {
-        printf("error pcap_dump_fopen\n");
-        return;
-    }
-}
-
-void write_btle_pcap(unsigned char * data, int xfer)
-{
-    // prepare for writing
-    timeval tp;
-    gettimeofday(&tp, NULL);
-    bt_hdr.ts.tv_sec = time(0);  // sec
-    bt_hdr.ts.tv_usec = tp.tv_sec * 1000 + tp.tv_usec / 1000; // ms
-    bt_hdr.caplen = bt_hdr.len = xfer;
-    // write single IP packet
-    if(debug_output){printf("pthread_mutex_lock btle\n");}
-    pthread_mutex_lock(&BtleMutex);
-    pcap_dump((u_char *)bt_d, &bt_hdr, data);
-    if(debug_output){printf("pthread_mutex_unlock btle\n");}
-    pthread_mutex_unlock(&BtleMutex);
-}
-
-void close_btle_pcap()
-{
-    if(debug_output)
-        printf("close the pcap\n");
-    if(bt_pcap != NULL)
-        pcap_close(bt_pcap);
-    if(bt_d != NULL)
-        pcap_dump_close(bt_d);
-}
-
-void btle_read(int tctr, libusb_device_handle *dev, int channel)
-{
-    u_char data[1024];
-    while (1)
-    {
-        int xfer = 0;
-//        if(debug_output){printf("pthread_mutex_lock usb\n");}
-//        pthread_mutex_lock(&UsbMutex);
-        int ret = libusb_bulk_transfer(dev, DATA_EP_CC2540, data, sizeof(data), &xfer, TIMEOUT);
-//        if(debug_output){printf("pthread_mutex_unlock usb\n");}
-//        pthread_mutex_unlock(&UsbMutex);
-        if(debug_output)
-        printf("bt ret:%d xfer:%d\n",ret,xfer);
-        if (ret == 0)
-        {
-            if(xfer > 7)
-            {
-                if(debug_output)
-                {
-                    printf("channel:%d ret:%d xfer:%d\n",channel,ret,xfer);
-                    for (int i = 0; i < xfer; i++)
-                        printf(" %02X", data[i]);
-                    printf("\n");
-                }
-                if(debug_output){printf("pthread_mutex_lock struct\n");}
-                pthread_mutex_lock(&StructMutex);
-                TICC_devices[tctr].pkt_ctr++;
-                if(debug_output){printf("pthread_mutex_unlock struct\n");}
-                pthread_mutex_unlock(&StructMutex);
-
-                if(save_files)
-                    write_btle_pcap(data, xfer);
-
-                if(cmd_Run == false)
-                    break;
-            }
-            TICC_devices[tctr].timeout_ctr=0;
-            TICC_devices[tctr].last_pkt_timestamp = time(0);
-        }
-        else
-        {
-            int diff = time(0) - TICC_devices[tctr].last_pkt_timestamp;
-            if(diff > 10)
-            {
-                if(ret == LIBUSB_ERROR_IO && debug_output)
-                    printf("bt LIBUSB_ERROR_IO\n");
-                else if(ret == LIBUSB_ERROR_INVALID_PARAM && debug_output)
-                    printf("bt LIBUSB_ERROR_INVALID_PARAM\n");
-                else if(ret == LIBUSB_ERROR_ACCESS && debug_output)
-                    printf("bt LIBUSB_ERROR_ACCESS\n");
-                else if(ret == LIBUSB_ERROR_NO_DEVICE && debug_output)
-                    printf("bt LIBUSB_ERROR_NO_DEVICE\n");
-                else if(ret == LIBUSB_ERROR_NOT_FOUND && debug_output)
-                    printf("bt LIBUSB_ERROR_NOT_FOUND\n");
-                else if(ret == LIBUSB_ERROR_BUSY && debug_output)
-                    printf("bt LIBUSB_ERROR_BUSY\n");
-                else if(ret == LIBUSB_ERROR_TIMEOUT && debug_output)
-                    printf("bt LIBUSB_ERROR_TIMEOUT ctr:%d\n",TICC_devices[tctr].timeout_ctr);
-                else if(ret == LIBUSB_ERROR_OVERFLOW && debug_output)
-                    printf("bt LIBUSB_ERROR_OVERFLOW\n");
-                else if(ret == LIBUSB_ERROR_PIPE && debug_output)
-                    printf("bt LIBUSB_ERROR_PIPE\n");
-                else if(ret == LIBUSB_ERROR_INTERRUPTED && debug_output)
-                    printf("bt LIBUSB_ERROR_INTERRUPTED\n");
-                else if(ret == LIBUSB_ERROR_NO_MEM && debug_output)
-                    printf("bt LIBUSB_ERROR_NO_MEM\n");
-                else if(ret == LIBUSB_ERROR_NOT_SUPPORTED && debug_output)
-                    printf("bt LIBUSB_ERROR_NOT_SUPPORTED\n");
-                else
-                {
-                    if(debug_output)
-                        printf("bt LIBUSB_ERROR:%d\n",ret);
-                }
-                if(ret != LIBUSB_ERROR_TIMEOUT)
-                {
-                    if(debug_output){printf("pthread_mutex_lock usb\n");}
-                    pthread_mutex_lock(&UsbMutex);
-                    //init(dev,channel);
-                    libusb_reset_device(dev);
-                    if(debug_output){printf("pthread_mutex_unlock usb\n");}
-                    pthread_mutex_unlock(&UsbMutex);
-                    TICC_devices[tctr].error_ctr++;
-                }
-                else
-                {
-                    //TICC_devices[tctr].error_ctr++;
-                    TICC_devices[tctr].timeout_ctr++;
-                    if(TICC_devices[tctr].timeout_ctr > 30)
-                    {
-                        if(debug_output){printf("pthread_mutex_lock usb\n");}
-                        pthread_mutex_lock(&UsbMutex);
-                        //init(dev,channel);
-                        libusb_reset_device(dev);
-                        if(debug_output){printf("pthread_mutex_unlock usb\n");}
-                        pthread_mutex_unlock(&UsbMutex);
-                        TICC_devices[tctr].timeout_ctr=0;
-                    }
-                }
-            }//end diff
-        }
-    }
 }
 
 int parse_cmd_line(int argc, char *argv[])
@@ -420,6 +103,11 @@ int parse_cmd_line(int argc, char *argv[])
             {
                 printf("we have a output file\n");
                 snprintf(u_file_name,64,"%s",argv[we+1]);
+            }
+            else if(strcmp(argv[we],"-df") == 0)
+            {
+                printf("debug output to file\n");
+                debug_file = true;
             }
             else if(strcmp(argv[we],"-d") == 0)//debug mode, no ncurses
             {
@@ -479,8 +167,8 @@ void SigHandler(int sig)
            }
 
            //close files if open
-           close_zigbee_pcap();
-           close_btle_pcap();
+           close_pcap(1);
+           close_pcap(2);
 
            end_ncurses();
            exit(1);
@@ -528,9 +216,9 @@ int main(int argc, char *argv[])
         return 0;
     }
     if(zigbee > 0 && save_files)
-        setup_zigbee_pcap();
+        setup_pcap(1);
     if(btle > 0 && save_files)
-        setup_btle_pcap();
+        setup_pcap(2);
 
     setup_struct();
 
@@ -546,8 +234,11 @@ int main(int argc, char *argv[])
         if(main_shutdown)//this should wait to be sure the pcap closed
             break;
         if(ncurses_display)
+        {
             print_running_status(cmd_Run);
-        if(main_ctr > 5 && ncurses_display)
+            print_time();
+        }
+        if(ncurses_display)
         {
             for(int i=0;i<=(zigbee+btle);i++)
             {
@@ -582,9 +273,9 @@ int main(int argc, char *argv[])
 
     //close files if open
     if(zigbee > 0 && save_files)
-        close_zigbee_pcap();
+        close_pcap(1);
     if(btle > 0 && save_files)
-        close_btle_pcap();
+        close_pcap(2);
 
     if(ncurses_display)
         end_ncurses();
