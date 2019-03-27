@@ -29,6 +29,7 @@ char u_file_name[64];
 bool debug_output = false;
 bool ncurses_display = true;
 bool save_files = true;
+bool pipe_file = false;
 bool debug_file = false;
 
 bool cmd_Run = true;

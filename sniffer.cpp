@@ -216,9 +216,9 @@ int main(int argc, char *argv[])
         return 0;
     }
     if(zigbee > 0 && save_files)
-        setup_pcap(1);
+        setup_pcap(1,pipe_file);
     if(btle > 0 && save_files)
-        setup_pcap(2);
+        setup_pcap(2,pipe_file);
 
     setup_struct();
 

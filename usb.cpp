@@ -490,5 +490,8 @@ void parse_2531_packet(unsigned char *data, int len)
 
      printf("header:%02X%02X%02X%02X\n",header[0],header[1],header[2],header[3]);
 
-
+     if(crc_ok > 0)
+     {
+          printf("pkt valid\n");
+     }
 }
