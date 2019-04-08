@@ -28,6 +28,7 @@ bool m_bt = true;
 extern bool debug_output;
 extern bool cmd_Run;
 extern bool save_files;
+extern bool only_valid;
 
 extern pthread_mutex_t ZigbeeMutex;
 extern pthread_mutex_t BtleMutex;
@@ -330,6 +331,7 @@ int find_devices()
 
 int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
 {
+    bool packet_valid = true;
     u_char data[1024];
     while (1)
     {
@@ -358,7 +360,7 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
                         printf(" %02X", data[i]);
                     printf("\n");
                     if(TICC_devices[tctr].dev_type == 1)
-                        parse_2531_packet(data, xfer);
+                        packet_valid = parse_2531_packet(data, xfer);
                 }
                 if(debug_output){printf("pthread_mutex_lock struct\n");}
                 pthread_mutex_lock(&StructMutex);
@@ -366,11 +368,23 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
                 if(debug_output){printf("pthread_mutex_unlock struct\n");}
                 pthread_mutex_unlock(&StructMutex);
 /**/
-                if(save_files)
+                if(save_files && only_valid)
                 {
+                    if(packet_valid)
+                    {
+                        if(debug_output){printf("pthread_mutex_lock struct\n");}
+                        pthread_mutex_lock(&StructMutex);
+                        write_pcap(TICC_devices[tctr].dev_type,data,xfer);	
+                        if(debug_output){printf("pthread_mutex_unlock struct\n");}
+                        pthread_mutex_unlock(&StructMutex);
+                    }
+                }
+                else if(save_files && !only_valid)//save packets dont care if valid
+                {
+
                     if(debug_output){printf("pthread_mutex_lock struct\n");}
                     pthread_mutex_lock(&StructMutex);
-                    write_pcap(TICC_devices[tctr].dev_type,data,xfer);	
+                    write_pcap(TICC_devices[tctr].dev_type,data,xfer);
                     if(debug_output){printf("pthread_mutex_unlock struct\n");}
                     pthread_mutex_unlock(&StructMutex);
                 }
@@ -446,7 +460,7 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
     }
 }
 
-void parse_2531_packet(unsigned char *data, int len)
+bool parse_2531_packet(unsigned char *data, int len)
 {
      unsigned char payload[128];memset(payload,0x00,128);
 
@@ -493,5 +507,8 @@ void parse_2531_packet(unsigned char *data, int len)
      if(crc_ok > 0)
      {
           printf("pkt valid\n");
+          return true;
      }
+     else
+          return false;
 }

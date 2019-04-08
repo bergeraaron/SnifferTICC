@@ -31,6 +31,7 @@ bool ncurses_display = true;
 bool save_files = true;
 bool pipe_file = false;
 bool debug_file = false;
+bool only_valid = true;
 
 bool cmd_Run = true;
 bool main_shutdown = false;
