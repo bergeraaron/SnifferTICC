@@ -465,9 +465,13 @@ bool parse_2531_packet(unsigned char *data, int len)
      unsigned char payload[128];memset(payload,0x00,128);
 
      int pkt_len = data[1];
+     if(debug_output)
      printf("pkt_len:%d len:%d\n",pkt_len,len);
      if(pkt_len != (len-3))
-	printf("packet length mismatch\n");
+     {
+        if(debug_output)
+	    printf("packet length mismatch\n");
+     }
 
      unsigned char header[4];
      int h_ctr=0;
@@ -482,31 +486,140 @@ bool parse_2531_packet(unsigned char *data, int len)
           payload[p_ctr] = data[i];p_ctr++;
      }
      int payload_len = data[7] - 0x02;
-     printf("p_ctr:%d payload_len:%d\n",p_ctr,payload_len);
+     if(debug_output)
+         printf("p_ctr:%d payload_len:%d\n",p_ctr,payload_len);
      if(p_ctr != payload_len)
-          printf("payload size mismatch\n");
+     {
+          if(debug_output)
+              printf("payload size mismatch\n");
+     }
 
      unsigned char fcs1 = data[len-2];
      unsigned char fcs2 = data[len-1];
-
-     printf("fcs1:%02X fcs2:%02X \n",fcs1,fcs2);
+     if(debug_output)
+         printf("fcs1:%02X fcs2:%02X \n",fcs1,fcs2);
 
 //rssi is the signed value at fcs1
      int rssi = (fcs1 + (int)pow(2,7)) % (int)pow(2,8) - (int)pow(2,7) - 73;
-
-     printf("rssi:%d\n",rssi);
+     if(debug_output)
+         printf("rssi:%d\n",rssi);
 
      unsigned char crc_ok = fcs2 & (1 << 7);
 
      unsigned char corr = fcs2 & 0x7f;
 
-     printf("crc_ok:%02X corr:%02X \n",crc_ok,corr);
+     if(debug_output)
+     {
+         printf("crc_ok:%02X corr:%02X \n",crc_ok,corr);
 
-     printf("header:%02X%02X%02X%02X\n",header[0],header[1],header[2],header[3]);
-
+         printf("header:%02X%02X%02X%02X\n",header[0],header[1],header[2],header[3]);
+     }
      if(crc_ok > 0)
      {
-          printf("pkt valid\n");
+          if(debug_output)
+              printf("pkt valid\n");
+
+          unsigned char plen = data[7];
+          unsigned short frame_control = (data[9] << 8) + data[8];
+          unsigned char seq_num = data[10];
+
+
+          //beacon packet
+//          unsigned short frame_control = (data[9] << 8) + data[8];//0x8000
+//	  unsigned char seq_num = data[10];
+if(frame_control == 0x8000)
+{
+          unsigned short source_pan = (data[12] << 8) + data[11];
+          unsigned short source_address = (data[14] << 8) + data[13];
+          unsigned short superrf_spec = (data[16] << 8) + data[15];
+          unsigned short gts_fields = (data[18] << 8) + data[17];
+          if(debug_output)
+          {
+              printf("\n");
+              printf("    BEACON FRAME\n");
+              printf("    frame_control:%04X\n",frame_control);
+              printf("    seq_num:%02X\n",seq_num);
+              printf("    source_pan:%04X\n",source_pan);
+              printf("    source_address:%04X\n",source_address);
+              printf("    superrf_spec:%04X\n",superrf_spec);
+              printf("    gts_fields:%04X\n",gts_fields);
+              printf("\n");
+          }
+}
+          //command packet
+//          unsigned short frame_control = (data[9] << 8) + data[8];//0x8023
+//          unsigned char seq_num = data[10];
+else if(frame_control == 0x8023)
+{
+          unsigned short source_pan = (data[12] << 8) + data[11];
+          unsigned short source_address = (data[14] << 8) + data[13];
+          unsigned short cmd_frame_id = data[15];
+          if(debug_output)
+          {
+              printf("\n");
+              printf("    COMMAND FRAME\n");
+              printf("    frame_control:%04X\n",frame_control);
+              printf("    seq_num:%02X\n",seq_num);
+              printf("    source_pan:%04X\n",source_pan);
+              printf("    source_address:%04X\n",source_address);
+              printf("    cmd_frame_id:%02X\n",cmd_frame_id);
+              printf("\n");
+          }
+}
+          //data packet
+ //         unsigned char plen = data[7];
+ //         unsigned short frame_control = (data[9] << 8) + data[8];//0x8841
+ //         unsigned char seq_num = data[10];
+else if(frame_control == 0x8841)
+{ 
+          unsigned short dest_pan = (data[12] << 8) + data[11];
+          unsigned short dest_address = (data[14] << 8) + data[13];
+          unsigned short source_address = (data[16] << 8) + data[15];
+          unsigned short mac_payload = (data[18] << 8) + data[17];//I think this can be variable.... so use plen
+          if(debug_output)
+          {
+              printf("\n");
+              printf("    DATA PACKET\n");
+              printf("    plen:%02X\n",plen);
+              printf("    frame_control:%04X\n",frame_control);
+              printf("    seq_num:%02X\n",seq_num);
+              printf("    dest_pan:%04X\n",dest_pan);
+              printf("    dest_address:%04X\n",dest_address);
+              printf("    source_address:%04X\n",source_address);
+              printf("    mac_payload:%04X\n",mac_payload);
+              printf("\n");
+          }
+}
+          //simpliciTI ping packet
+//          unsigned char plen = data[7];
+//          unsigned short frame_control = (data[9] << 8) + data[8];//0x8841
+//          unsigned char seq_num = data[10];
+else if(frame_control == 0x8841)
+{
+          unsigned int dest_address = (data[17] << 32) + (data[16] << 16) + (data[15] << 8) + data[14];
+          unsigned int source_address = (data[21] << 32) + (data[20] << 16) + (data[19] << 8) + data[18];
+          unsigned char port = data[22];
+          unsigned char device_info = data[23];
+          unsigned char trans_id = data[24];
+          unsigned short payload = (data[26] << 8) + data[25];//I think this can be variable.... so use plen
+          if(debug_output)
+          {
+              printf("\n");
+              printf("    simpliciTI ping packet\n");
+              printf("    plen:%02X\n",plen);
+              printf("    frame_control:%04X\n",frame_control);
+              printf("    seq_num:%02X\n",seq_num);
+              printf("    dest_address:%08X\n",dest_address);
+              printf("    source_address:%08X\n",source_address);
+              printf("    port:%02X\n",port);
+              printf("    device_info:%02X\n",device_info);
+              printf("    trans_id:%02X\n",trans_id);
+              printf("    payload:%04X\n",payload);
+              printf("\n");
+          }
+}
+
+
           return true;
      }
      else
