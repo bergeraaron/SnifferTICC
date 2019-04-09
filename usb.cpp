@@ -575,7 +575,8 @@ else if(frame_control == 0x8841)
           unsigned short dest_pan = (data[12] << 8) + data[11];
           unsigned short dest_address = (data[14] << 8) + data[13];
           unsigned short source_address = (data[16] << 8) + data[15];
-          unsigned short mac_payload = (data[18] << 8) + data[17];//I think this can be variable.... so use plen
+          //unsigned short mac_payload = (data[18] << 8) + data[17];//I think this can be variable.... so use plen
+          unsigned short mac_payload_length = plen - 9 - 2;//length of stuff from plen to the payload minus the fcs
           if(debug_output)
           {
               printf("\n");
@@ -586,7 +587,10 @@ else if(frame_control == 0x8841)
               printf("    dest_pan:%04X\n",dest_pan);
               printf("    dest_address:%04X\n",dest_address);
               printf("    source_address:%04X\n",source_address);
-              printf("    mac_payload:%04X\n",mac_payload);
+              //printf("    mac_payload:%04X\n",mac_payload);
+              printf("    payload:");
+              for(int i=0;i < mac_payload_length;i++)
+                  printf("%02X",data[17+i]);
               printf("\n");
           }
 }
