@@ -25,6 +25,7 @@ int TICC_device_ctr = 0;
 bool m_zigbee = true;
 bool m_bt = true;
 
+extern bool full_debug_output;
 extern bool debug_output;
 extern bool cmd_Run;
 extern bool save_files;
@@ -61,46 +62,46 @@ int init(libusb_device_handle *dev, int channel)
     int ret;
     int rc = 0; 
     /*Check if kenel driver attached*/
-    if(debug_output)
+    if(full_debug_output)
         printf("Check if kernel driver attached\n");
     if(libusb_kernel_driver_active(dev, 0))
     {
-        if(debug_output)
+        if(full_debug_output)
             printf("detach driver\n");
         rc = libusb_detach_kernel_driver(dev, 0); // detach driver
         assert(rc == 0);
     }
-    if(debug_output)
+    if(full_debug_output)
         printf("libusb_claim_interface\n");
     rc = libusb_claim_interface(dev, 0);
-    if(debug_output)
+    if(full_debug_output)
         printf("rc%d\n",rc);
     //assert(rc < 0);
 
     //set the configuration
-    if(debug_output)
+    if(full_debug_output)
         printf("set the configuration\n");
     rc = libusb_set_configuration(dev, -1);
     assert(rc < 0);
 
     // read ident
-    if(debug_output)
+    if(full_debug_output)
         printf("read ident\n");
     ret = get_ident(dev);
     if (ret < 0)
     {
-        if(debug_output)
+        if(full_debug_output)
             printf("getting identity failed!\n");
         return ret;
     }
 
     // set power
-    if(debug_output)
+    if(full_debug_output)
         printf("set power\n");
     ret = set_power(dev, 0x04, POWER_RETRIES);
     if (ret < 0)
     {
-        if(debug_output)
+        if(full_debug_output)
             printf("setting power failed!\n");
         return ret;
     }
@@ -108,25 +109,25 @@ int init(libusb_device_handle *dev, int channel)
     // ?
     ret = libusb_control_transfer(dev, DIR_OUT, 0xC9, 0x00, 0x00, NULL, 0, TIMEOUT);
     if (ret < 0) {
-    if(debug_output)
+    if(full_debug_output)
     printf("setting reg 0xC9 failed!\n");
     return ret;
     }
     /**/
 
     // set capture channel
-    if(debug_output)
+    if(full_debug_output)
         printf("set capture channel %d\n",channel);
     ret = set_channel(dev, channel);
     if (ret < 0)
     {
-        if(debug_output)
+        if(full_debug_output)
             printf("setting channel failed!\n");
         return ret;
     }
 
     // start capture?
-    if(debug_output)
+    if(full_debug_output)
         printf("start capture?\n");
     ret = libusb_control_transfer(dev, DIR_OUT, SET_START, 0x00, 0x00, NULL, 0, TIMEOUT);
 
@@ -137,10 +138,10 @@ int get_ident(libusb_device_handle *dev)
 {
     uint8_t ident[32];
     int ret;
-    if(debug_output)
+    if(full_debug_output)
         printf("libusb_control_transfer\n"); 
     ret = libusb_control_transfer(dev, DIR_IN, GET_IDENT, 0x00, 0x00, ident, sizeof(ident), TIMEOUT);
-    if(debug_output)
+    if(full_debug_output)
     {
         printf("print out\n");
         if (ret > 0)
@@ -187,7 +188,7 @@ int set_channel(libusb_device_handle *dev, uint8_t channel)
     ret = libusb_control_transfer(dev, DIR_OUT, SET_CHAN, 0x00, 0x00, &data, 1, TIMEOUT);
     if (ret < 0)
     {
-        if(debug_output)
+        if(full_debug_output)
             printf("setting channel (LSB) failed!\n");
         return ret;
     }
@@ -195,7 +196,7 @@ int set_channel(libusb_device_handle *dev, uint8_t channel)
     ret = libusb_control_transfer(dev, DIR_OUT, SET_CHAN, 0x00, 0x01, &data, 1, TIMEOUT);
     if (ret < 0)
     {
-        if(debug_output)
+        if(full_debug_output)
             printf("setting channel (LSB) failed!\n");
         return ret;
     }
@@ -228,30 +229,30 @@ int find_num_devices(int& zigbee,int& btle)
         device = list[idx];
         rc = libusb_get_device_descriptor(device, &desc);
         assert(rc == 0);
-        if(debug_output)
+        if(full_debug_output)
             printf("Vendor:Device = %04x:%04x\n", desc.idVendor, desc.idProduct);
 
         if(desc.idVendor == 0x0451 && desc.idProduct == 0x16ae && m_zigbee)
         {
-            if(debug_output)
+            if(debug_output || full_debug_output)
             printf("found CC2531 %d\n",(int)idx);
             zigbee++;
         }
         else if(desc.idVendor == 0x11a0 && desc.idProduct == 0xeb20)
         {
             //probably won't have any of these
-            if(debug_output)
+            if(debug_output || full_debug_output)
             printf("found CC2530 %d\n",(int)idx);
         }
         else if(desc.idVendor == 0x0451 && desc.idProduct == 0x16b3 && m_bt)
         {
-            if(debug_output)
+            if(debug_output || full_debug_output)
             printf("found CC2540 %d\n",(int)idx);
             btle++;
         }
     }
     libusb_free_device_list(list, count);
-    if(debug_output)
+    if(debug_output || full_debug_output)
     printf("zigbee:%d btle:%d\n",zigbee,btle);
 }
 
@@ -288,7 +289,7 @@ int find_devices()
 
         if(desc.idVendor == 0x0451 && desc.idProduct == 0x16ae && m_zigbee)
         {
-            if(debug_output)
+            if(debug_output || full_debug_output)
             printf("found CC2531 %d\n",(int)idx);
             //libusb_device_handle *dev;
             libusb_open(device,&TICC_devices[TICC_device_ctr].dev);
@@ -305,13 +306,13 @@ int find_devices()
         else if(desc.idVendor == 0x11a0 && desc.idProduct == 0xeb20)
         {
             //probably won't have any of these
-            if(debug_output)
+            if(debug_output || full_debug_output)
             printf("found CC2530 %d\n",(int)idx);
             //break;
         }
         else if(desc.idVendor == 0x0451 && desc.idProduct == 0x16b3 && m_bt)
         {
-            if(debug_output)
+            if(debug_output || full_debug_output)
             printf("found CC2540 %d\n",(int)idx);
             //libusb_device_handle *dev;
             libusb_open(device,&TICC_devices[TICC_device_ctr].dev);
@@ -353,7 +354,7 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
             //the devices look to report a 4 byte counter/heartbeat, should use this for debugging
             if(xfer > 7)
             {
-                if(debug_output)
+                if(debug_output || full_debug_output)
                 {
                     printf("channel:%d ret:%d xfer:%d\n",channel,ret,xfer);
                     for (int i = 0; i < xfer; i++)
@@ -362,30 +363,30 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
                     if(TICC_devices[tctr].dev_type == 1)
                         packet_valid = parse_2531_packet(data, xfer);
                 }
-                if(debug_output){printf("pthread_mutex_lock struct\n");}
+                if(full_debug_output){printf("pthread_mutex_lock struct\n");}
                 pthread_mutex_lock(&StructMutex);
                 TICC_devices[tctr].pkt_ctr++;
-                if(debug_output){printf("pthread_mutex_unlock struct\n");}
+                if(full_debug_output){printf("pthread_mutex_unlock struct\n");}
                 pthread_mutex_unlock(&StructMutex);
 /**/
                 if(save_files && only_valid)
                 {
                     if(packet_valid)
                     {
-                        if(debug_output){printf("pthread_mutex_lock struct\n");}
+                        if(full_debug_output){printf("pthread_mutex_lock struct\n");}
                         pthread_mutex_lock(&StructMutex);
                         write_pcap(TICC_devices[tctr].dev_type,data,xfer);	
-                        if(debug_output){printf("pthread_mutex_unlock struct\n");}
+                        if(full_debug_output){printf("pthread_mutex_unlock struct\n");}
                         pthread_mutex_unlock(&StructMutex);
                     }
                 }
                 else if(save_files && !only_valid)//save packets dont care if valid
                 {
 
-                    if(debug_output){printf("pthread_mutex_lock struct\n");}
+                    if(full_debug_output){printf("pthread_mutex_lock struct\n");}
                     pthread_mutex_lock(&StructMutex);
                     write_pcap(TICC_devices[tctr].dev_type,data,xfer);
-                    if(debug_output){printf("pthread_mutex_unlock struct\n");}
+                    if(full_debug_output){printf("pthread_mutex_unlock struct\n");}
                     pthread_mutex_unlock(&StructMutex);
                 }
 /**/
@@ -401,42 +402,42 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
             if(diff > 10)
             {
                 //printf("diff:%d\n",diff);
-                if(ret == LIBUSB_ERROR_IO && debug_output)
+                if(ret == LIBUSB_ERROR_IO && full_debug_output)
                     printf("LIBUSB_ERROR_IO\n");
-                else if(ret == LIBUSB_ERROR_INVALID_PARAM && debug_output)
+                else if(ret == LIBUSB_ERROR_INVALID_PARAM && full_debug_output)
                     printf("LIBUSB_ERROR_INVALID_PARAM\n");
-                else if(ret == LIBUSB_ERROR_ACCESS && debug_output)
+                else if(ret == LIBUSB_ERROR_ACCESS && full_debug_output)
                     printf("LIBUSB_ERROR_ACCESS\n");
-                else if(ret == LIBUSB_ERROR_NO_DEVICE && debug_output)
+                else if(ret == LIBUSB_ERROR_NO_DEVICE && full_debug_output)
                     printf("LIBUSB_ERROR_NO_DEVICE\n");
-                else if(ret == LIBUSB_ERROR_NOT_FOUND && debug_output)
+                else if(ret == LIBUSB_ERROR_NOT_FOUND && full_debug_output)
                     printf("LIBUSB_ERROR_NOT_FOUND\n");
-                else if(ret == LIBUSB_ERROR_BUSY && debug_output)
+                else if(ret == LIBUSB_ERROR_BUSY && full_debug_output)
                     printf("LIBUSB_ERROR_BUSY\n");
-                else if(ret == LIBUSB_ERROR_TIMEOUT && debug_output)
+                else if(ret == LIBUSB_ERROR_TIMEOUT && full_debug_output)
                     printf("LIBUSB_ERROR_TIMEOUT ctr:%d\n",TICC_devices[tctr].timeout_ctr);
-                else if(ret == LIBUSB_ERROR_OVERFLOW && debug_output)
+                else if(ret == LIBUSB_ERROR_OVERFLOW && full_debug_output)
                     printf("LIBUSB_ERROR_OVERFLOW\n");
-                else if(ret == LIBUSB_ERROR_PIPE && debug_output)
+                else if(ret == LIBUSB_ERROR_PIPE && full_debug_output)
                     printf("LIBUSB_ERROR_PIPE\n");
-                else if(ret == LIBUSB_ERROR_INTERRUPTED && debug_output)
+                else if(ret == LIBUSB_ERROR_INTERRUPTED && full_debug_output)
                     printf("LIBUSB_ERROR_INTERRUPTED\n");
-                else if(ret == LIBUSB_ERROR_NO_MEM && debug_output)
+                else if(ret == LIBUSB_ERROR_NO_MEM && full_debug_output)
                     printf("LIBUSB_ERROR_NO_MEM\n");
-                else if(ret == LIBUSB_ERROR_NOT_SUPPORTED && debug_output)
+                else if(ret == LIBUSB_ERROR_NOT_SUPPORTED && full_debug_output)
                     printf("LIBUSB_ERROR_NOT_SUPPORTED\n");
                 else
                 {
-                    if(debug_output)
+                    if(full_debug_output)
                         printf("LIBUSB_ERROR:%d\n",ret);
                 }
                 if(ret != LIBUSB_ERROR_TIMEOUT)
                 {
-                    if(debug_output){printf("pthread_mutex_lock usb\n");}
+                    if(full_debug_output){printf("pthread_mutex_lock usb\n");}
                     pthread_mutex_lock(&UsbMutex);
                     init(dev,channel);
                     //libusb_reset_device(dev);
-                    if(debug_output){printf("pthread_mutex_unlock usb\n");}
+                    if(full_debug_output){printf("pthread_mutex_unlock usb\n");}
                     pthread_mutex_unlock(&UsbMutex);
                     TICC_devices[tctr].error_ctr++;
                 }
@@ -446,11 +447,11 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
                     TICC_devices[tctr].timeout_ctr++;
                     if(TICC_devices[tctr].timeout_ctr > 30)
                     {
-                        if(debug_output){printf("pthread_mutex_lock usb\n");}
+                        if(full_debug_output){printf("pthread_mutex_lock usb\n");}
                         pthread_mutex_lock(&UsbMutex);
                         init(dev,channel);
                         //libusb_reset_device(dev);
-                        if(debug_output){printf("pthread_mutex_unlock usb\n");}
+                        if(full_debug_output){printf("pthread_mutex_unlock usb\n");}
                         pthread_mutex_unlock(&UsbMutex);
                         TICC_devices[tctr].timeout_ctr=0;
                     }
@@ -465,11 +466,11 @@ bool parse_2531_packet(unsigned char *data, int len)
      unsigned char payload[128];memset(payload,0x00,128);
 
      int pkt_len = data[1];
-     if(debug_output)
+     if(full_debug_output)
      printf("pkt_len:%d len:%d\n",pkt_len,len);
      if(pkt_len != (len-3))
      {
-        if(debug_output)
+        if(full_debug_output)
 	    printf("packet length mismatch\n");
      }
 
@@ -486,29 +487,29 @@ bool parse_2531_packet(unsigned char *data, int len)
           payload[p_ctr] = data[i];p_ctr++;
      }
      int payload_len = data[7] - 0x02;
-     if(debug_output)
+     if(full_debug_output)
          printf("p_ctr:%d payload_len:%d\n",p_ctr,payload_len);
      if(p_ctr != payload_len)
      {
-          if(debug_output)
+          if(full_debug_output)
               printf("payload size mismatch\n");
      }
 
      unsigned char fcs1 = data[len-2];
      unsigned char fcs2 = data[len-1];
-     if(debug_output)
+     if(full_debug_output)
          printf("fcs1:%02X fcs2:%02X \n",fcs1,fcs2);
 
 //rssi is the signed value at fcs1
      int rssi = (fcs1 + (int)pow(2,7)) % (int)pow(2,8) - (int)pow(2,7) - 73;
-     if(debug_output)
+     if(full_debug_output)
          printf("rssi:%d\n",rssi);
 
      unsigned char crc_ok = fcs2 & (1 << 7);
 
      unsigned char corr = fcs2 & 0x7f;
 
-     if(debug_output)
+     if(full_debug_output)
      {
          printf("crc_ok:%02X corr:%02X \n",crc_ok,corr);
 
@@ -522,7 +523,11 @@ bool parse_2531_packet(unsigned char *data, int len)
           unsigned char plen = data[7];
           unsigned short frame_control = (data[9] << 8) + data[8];
           unsigned char seq_num = data[10];
-
+          if(debug_output)
+          {
+                  printf("    frame_control:%04X\n",frame_control);
+                  printf("    seq_num:%02X\n",seq_num);
+          }
 
           //beacon packet
 //          unsigned short frame_control = (data[9] << 8) + data[8];//0x8000

@@ -30,11 +30,11 @@ void setup_threads(int num_threads)
 
 void* command_thread(void * arg)
 {
-    if(debug_output)
+    if(full_debug_output)
         printf("command thread \n");
     int * tctr;
     tctr = (int *) arg;
-    if(debug_output)
+    if(full_debug_output)
     {
         printf("tctr:%d\n",*tctr);
         printf("detach\n");
@@ -47,14 +47,14 @@ void* command_thread(void * arg)
 
         if(TICC_devices[*tctr].channel > 0 && cmd_Run == true)
         {
-            if(debug_output)
+            if(full_debug_output)
                 printf("init:%d dev_type:%02X\n",*tctr,TICC_devices[*tctr].dev_type);
 	    //think I have a problem with the inita nd threading
 //            pthread_mutex_lock(&StructMutex);
 //            init(TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
 //            TICC_devices[*tctr].configured = true;
 //            pthread_mutex_unlock(&StructMutex);
-            if(debug_output)
+            if(full_debug_output)
                 printf("read\n");
             if(TICC_devices[*tctr].dev_type == CC2531)
                 read_from_usb(*tctr,TICC_devices[*tctr].dev,TICC_devices[*tctr].channel);
@@ -63,13 +63,13 @@ void* command_thread(void * arg)
         }
         else if(cmd_Run == false)
         {
-            if(debug_output)
+            if(full_debug_output)
             printf("shut down thread :%d\n",*tctr);
             main_shutdown = true;
             break;
         }
     }
-    if(debug_output)
+    if(full_debug_output)
     printf("exit thread\n");
     pthread_exit(NULL);
 }
@@ -157,11 +157,11 @@ void SigHandler(int sig)
            {
                if(TICC_devices[i].channel > 0)
                {
-                    if(debug_output){printf("pthread_mutex_lock struct\n");}
+                    if(full_debug_output){printf("pthread_mutex_lock struct\n");}
                     pthread_mutex_lock(&StructMutex);
                     libusb_release_interface(TICC_devices[i].dev,i);
                     libusb_close(TICC_devices[i].dev);
-                    if(debug_output){printf("pthread_mutex_unlock struct\n");}
+                    if(full_debug_output){printf("pthread_mutex_unlock struct\n");}
                     pthread_mutex_unlock(&StructMutex);
                }
            }
@@ -244,10 +244,10 @@ int main(int argc, char *argv[])
             {
                 if(TICC_devices[i].channel > 0)
                 {
-                    if(debug_output){printf("pthread_mutex_lock struct\n");}
+                    if(full_debug_output){printf("pthread_mutex_lock struct\n");}
                     pthread_mutex_lock(&StructMutex);
                     print_status(i+2,(int)TICC_devices[i].dev_type,TICC_devices[i].channel,TICC_devices[i].pkt_ctr,TICC_devices[i].error_ctr);
-                    if(debug_output){printf("pthread_mutex_iunlock struct\n");}
+                    if(full_debug_output){printf("pthread_mutex_iunlock struct\n");}
                     pthread_mutex_unlock(&StructMutex);
                 }
             }
@@ -256,17 +256,17 @@ int main(int argc, char *argv[])
         main_ctr++;
         sleep(1);
     }
-    if(debug_output)
+    if(full_debug_output)
         printf("close all of the libusb\n");
     for(int i=0;i<MaxThreads;i++)
     {
         if(TICC_devices[i].channel > 0)
         {
-            if(debug_output){printf("pthread_mutex_lock struct\n");}
+            if(full_debug_output){printf("pthread_mutex_lock struct\n");}
             pthread_mutex_lock(&StructMutex);
             libusb_release_interface(TICC_devices[i].dev,i);
             libusb_close(TICC_devices[i].dev);
-            if(debug_output){printf("pthread_mutex_unlock struct\n");}
+            if(full_debug_output){printf("pthread_mutex_unlock struct\n");}
             pthread_mutex_unlock(&StructMutex);
         }
     }
