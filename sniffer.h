@@ -27,12 +27,12 @@ pthread_mutex_t UsbMutex;
 
 char u_file_name[64];
 bool debug_output = false;
-bool full_debug_output = false;
-bool ncurses_display = true;
-bool save_files = true;
+bool full_debug_output = true;
+bool ncurses_display = false;
+bool save_files = false;
 bool pipe_file = false;
 bool debug_file = false;
-bool only_valid = true;
+bool only_valid = false;
 
 bool cmd_Run = true;
 bool main_shutdown = false;

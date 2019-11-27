@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <pcap.h>
 #include <math.h>
+#include <locale>
 
 #include "usb.h"
 #include "pcap.h"
@@ -358,10 +359,29 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
                 {
                     printf("channel:%d ret:%d xfer:%d\n",channel,ret,xfer);
                     for (int i = 0; i < xfer; i++)
+                    {
                         printf(" %02X", data[i]);
+                    }
+
                     printf("\n");
                     if(TICC_devices[tctr].dev_type == 1)
                         packet_valid = parse_2531_packet(data, xfer);
+                    else
+                    {
+                        packet_valid = parse_2540_packet(data, xfer);
+                        if(packet_valid)
+                        {
+                            printf("\n");
+                            for (int i = 0; i < xfer; i++)
+                            {
+                                if(isprint(data[i]))
+                                {
+                                    printf("%c", data[i], data[i]);
+                                }
+                            }
+                            printf("\n");
+                        }
+                    }
                 }
                 if(full_debug_output){printf("pthread_mutex_lock struct\n");}
                 pthread_mutex_lock(&StructMutex);
@@ -629,6 +649,67 @@ else if(frame_control == 0x8841)
 }
 
 
+          return true;
+     }
+     else
+          return false;
+}
+bool parse_2540_packet(unsigned char *data, int len)
+{
+     unsigned char payload[128];memset(payload,0x00,128);
+
+     int pkt_len = data[1];
+     if(full_debug_output)
+     printf("pkt_len:%d len:%d\n",pkt_len,len);
+     if(pkt_len != (len-3))
+     {
+        if(full_debug_output)
+	    printf("packet length mismatch\n");
+     }
+
+     unsigned char header[4];
+     int h_ctr=0;
+     for(int i=3;i<7;i++)
+     {
+          header[h_ctr] = data[i];h_ctr++;
+     }
+     //get the paylaod
+     int p_ctr=0;
+     for(int i=8;i<(len-2);i++)
+     {
+          payload[p_ctr] = data[i];p_ctr++;
+     }
+     int payload_len = data[7] - 0x02;
+     if(full_debug_output)
+         printf("p_ctr:%d payload_len:%d\n",p_ctr,payload_len);
+     if(p_ctr != payload_len)
+     {
+          if(full_debug_output)
+              printf("payload size mismatch\n");
+     }
+
+     unsigned char fcs1 = data[len-2];
+     unsigned char fcs2 = data[len-1];
+     if(full_debug_output)
+         printf("fcs1:%02X fcs2:%02X \n",fcs1,fcs2);
+
+//rssi is the signed value at fcs1
+     int rssi = (fcs1 + (int)pow(2,7)) % (int)pow(2,8) - (int)pow(2,7) - 73;
+     if(full_debug_output)
+         printf("rssi:%d\n",rssi);
+
+     unsigned char crc_ok = fcs2 & (1 << 7);
+
+     unsigned char chan = fcs2 & 0x7f;
+
+     if(full_debug_output)
+     {
+         printf("crc_ok:%02X chan:%d \n",crc_ok,chan);
+     }
+     if(crc_ok > 0)
+     {
+          if(debug_output)
+              printf("pkt valid\n");
           return true;
      }
      else

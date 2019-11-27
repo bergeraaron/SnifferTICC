@@ -46,3 +46,4 @@ int find_num_devices(int& zigbee,int& btle);
 int find_devices();
 int read_from_usb(int tctr, libusb_device_handle *dev, int channel);
 bool parse_2531_packet(unsigned char *data, int len);
+bool parse_2540_packet(unsigned char *data, int len);
