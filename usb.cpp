@@ -394,6 +394,37 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
                     if(packet_valid)
                     {
                         if(full_debug_output){printf("pthread_mutex_lock struct\n");}
+			if(TICC_devices[tctr].dev_type == 1)
+			{
+                                uint8_t tmp_usb_buf[1024];
+                                int p_ctr=0;
+                                for(int i=8;i<(xfer);i++) {
+                                        tmp_usb_buf[p_ctr] = data[i];p_ctr++;
+                                }
+                                memset(data,0x00,1024);
+                                for(int i=0;i<p_ctr;i++) {
+                                        data[i] = tmp_usb_buf[i];
+                                }
+                                xfer = p_ctr;
+			
+		                u_int16_t crc = 0;
+				crc = crc16_block(crc, data, (xfer-2));
+				data[xfer-1] = crc >> 8;
+				data[xfer-2] = crc & 0x00ff;;
+			}
+			else
+			{
+				uint8_t tmp_usb_buf[1024];
+				int p_ctr=0;
+				for(int i=8;i<(xfer-2);i++) {
+					tmp_usb_buf[p_ctr] = data[i];p_ctr++;
+				}
+				memset(data,0x00,1024);
+				for(int i=0;i<p_ctr;i++) {
+					data[i] = tmp_usb_buf[i];
+				}
+				xfer = p_ctr;
+			}
                         pthread_mutex_lock(&StructMutex);
                         write_pcap(TICC_devices[tctr].dev_type,data,xfer);	
                         if(full_debug_output){printf("pthread_mutex_unlock struct\n");}
@@ -483,7 +514,7 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
 
 bool parse_2531_packet(unsigned char *data, int len)
 {
-     unsigned char payload[128];memset(payload,0x00,128);
+     unsigned char payload[1024];memset(payload,0x00,1024);
 
      int pkt_len = data[1];
      if(full_debug_output)
@@ -656,7 +687,7 @@ else if(frame_control == 0x8841)
 }
 bool parse_2540_packet(unsigned char *data, int len)
 {
-     unsigned char payload[128];memset(payload,0x00,128);
+     unsigned char payload[1024];memset(payload,0x00,1024);
 
      int pkt_len = data[1];
      if(full_debug_output)
@@ -715,3 +746,12 @@ bool parse_2540_packet(unsigned char *data, int len)
      else
           return false;
 }
+u_int16_t crc16_block(u_int16_t crc, u_int8_t *data, int len) {
+    int i;
+
+    for (i = 0; i < len; i++)
+        crc = (crc >> 8) ^ crctable[(crc ^ data[i]) & 0xFF];
+
+    return crc;
+}
+

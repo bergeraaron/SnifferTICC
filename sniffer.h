@@ -29,10 +29,10 @@ char u_file_name[64];
 bool debug_output = false;
 bool full_debug_output = true;
 bool ncurses_display = false;
-bool save_files = false;
+bool save_files = true;
 bool pipe_file = false;
 bool debug_file = false;
-bool only_valid = false;
+bool only_valid = true;
 
 bool cmd_Run = true;
 bool main_shutdown = false;
