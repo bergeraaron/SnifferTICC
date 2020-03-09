@@ -26,8 +26,8 @@ pthread_mutex_t StructMutex;
 pthread_mutex_t UsbMutex;
 
 char u_file_name[64];
-bool debug_output = false;
-bool full_debug_output = true;
+bool debug_output = true;
+bool full_debug_output = false;
 bool ncurses_display = false;
 bool save_files = true;
 bool pipe_file = false;
