@@ -79,13 +79,13 @@ int init(libusb_device_handle *dev, int channel)
     rc = libusb_claim_interface(dev, 0);
     if(full_debug_output)
         printf("rc%d\n",rc);
-    //assert(rc < 0);
+    //assert(rc == 0);
 
     //set the configuration
     if(full_debug_output)
         printf("set the configuration\n");
-    rc = libusb_set_configuration(dev, -1);
-    assert(rc < 0);
+    rc = libusb_set_configuration(dev, 1);
+    assert(rc == 0);
 
     // read ident
     if(full_debug_output)
