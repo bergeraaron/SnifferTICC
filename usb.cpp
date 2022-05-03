@@ -56,6 +56,8 @@ int usb_lib_init()
     int rc = 0;
     rc = libusb_init(&maincontext);
     assert(rc == 0);
+
+    return rc;
 }
 
 int init(libusb_device_handle *dev, int channel)
@@ -77,13 +79,13 @@ int init(libusb_device_handle *dev, int channel)
     rc = libusb_claim_interface(dev, 0);
     if(full_debug_output)
         printf("rc%d\n",rc);
-    //assert(rc < 0);
+    //assert(rc == 0);
 
     //set the configuration
     if(full_debug_output)
         printf("set the configuration\n");
-    rc = libusb_set_configuration(dev, -1);
-    assert(rc < 0);
+    rc = libusb_set_configuration(dev, 1);
+    assert(rc == 0);
 
     // read ident
     if(full_debug_output)
@@ -114,7 +116,7 @@ int init(libusb_device_handle *dev, int channel)
     printf("setting reg 0xC9 failed!\n");
     return ret;
     }
-    /**/
+    */
 
     // set capture channel
     if(full_debug_output)
@@ -205,13 +207,13 @@ int set_channel(libusb_device_handle *dev, uint8_t channel)
     return ret;
 }
 
-int find_num_devices(int& zigbee,int& btle)
+void find_num_devices(int& zigbee,int& btle)
 {
     /**
     CC2531 idVendor=0x0451, idProduct=0x16ae
     CC2530 idVendor=0x11a0, idProduct=0xeb20
     CC2540 idVendor=0x0451, idProduct=0x16b3
-    /**/
+    */
 
     libusb_device **list = NULL;
 
@@ -257,13 +259,13 @@ int find_num_devices(int& zigbee,int& btle)
     printf("zigbee:%d btle:%d\n",zigbee,btle);
 }
 
-int find_devices()
+void find_devices()
 {
     /**
     CC2531 idVendor=0x0451, idProduct=0x16ae
     CC2530 idVendor=0x11a0, idProduct=0xeb20
     CC2540 idVendor=0x0451, idProduct=0x16b3
-    /**/
+    */
 
     int zb_ctr = 0;
     int bt_ctr = 0;
@@ -331,7 +333,7 @@ int find_devices()
     libusb_free_device_list(list, count);
 }
 
-int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
+void read_from_usb(int tctr, libusb_device_handle *dev, int channel)
 {
     bool packet_valid = true;
     u_char data[1024];
@@ -376,7 +378,7 @@ int read_from_usb(int tctr, libusb_device_handle *dev, int channel)
                             {
                                 if(isprint(data[i]))
                                 {
-                                    printf("%c", data[i], data[i]);
+                                    printf("%c", data[i]);
                                 }
                             }
                             printf("\n");
